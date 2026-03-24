@@ -7,3 +7,6 @@ data/posted_log.json
 *.zip
 
 .github/workflows/ci.yml
+data/accounts/*/camoufox_profile/
+**/camoufox_profile/
+data/accounts/*/camoufox_profile/**
