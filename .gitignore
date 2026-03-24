@@ -5,3 +5,5 @@ data/session.json
 data/posted_log.json
 
 *.zip
+
+.github/workflows/ci.yml
