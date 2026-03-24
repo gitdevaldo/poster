@@ -1,0 +1,94 @@
+session:
+  path: data/session.json
+  persistent_profile_dir: data/camoufox_profile
+  apply_cookie_overlay: false
+  auto_relogin: true
+active_account: account-1
+groups:
+  source: data/groups.json
+  blacklist: data/blacklist.txt
+  rescrape_every_days: 7
+  scrape:
+    max_scrolls: 30
+    idle_rounds_to_stop: 4
+    scroll_wait_ms: 1400
+    min_scroll_rounds_before_stop: 8
+posting:
+  template_file: post_1.yaml
+  rotation_mode: single
+  min_delay_minutes: 3
+  max_delay_minutes: 5
+  max_posts_per_session: 15
+  cooldown_hours: 24
+  rest_every_n_posts: 10
+  rest_duration_minutes: 30
+  dry_run: true
+browser:
+  headless: false
+  locale: id-ID
+  timezone: Asia/Jakarta
+  humanize: true
+  fullscreen: true
+  screen_max_width: 1536
+  screen_max_height: 864
+  window_width: 1536
+  window_height: 864
+camoufox:
+  geoip: false
+  os: windows
+  proxy: {}
+paths:
+  queue_state: data/queue_state.json
+  posted_log: data/logs/posted_log.json
+  screenshots: logs/screenshots
+facebook:
+  home_url: https://www.facebook.com/
+  group_feed_url: https://www.facebook.com/groups/feed/
+  joined_groups_url: https://www.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added
+  selectors:
+    composer_buttons:
+    - div[role='button'][aria-label*='Write something']
+    - div[role='button'][aria-label*='Tulis sesuatu']
+    - div[role='button']:has-text('Write something')
+    - div[role='button']:has-text('Tulis sesuatu')
+    - div[data-testid='group-composer-enter-composer']
+    textboxes:
+    - div[role='textbox']
+    - div[contenteditable='true'][role='textbox']
+    - div[aria-label*='Write']
+    - div[aria-label*='Tulis']
+    post_buttons:
+    - div[role='button']:has-text('Post')
+    - div[role='button']:has-text('Kirim')
+    - div[data-testid='react-composer-post-button']
+    file_input: input[type='file']
+error_handling:
+  retry_max_attempts: 2
+  retry_backoff_seconds: 3
+  screenshot_on_failure: true
+  mark_inactive_on_404: true
+  pause_on_captcha: true
+  stop_on_rate_limit: true
+  captcha_keywords:
+  - captcha
+  - checkpoint
+  - verify you are human
+  rate_limit_keywords:
+  - try again later
+  - temporarily blocked
+  - you've been restricted
+accounts:
+  account-1:
+    enabled: true
+    session:
+      path: data/accounts/account-1/session.json
+      persistent_profile_dir: data/accounts/account-1/camoufox_profile
+    groups:
+      source: data/accounts/account-1/groups.json
+      blacklist: data/accounts/account-1/blacklist.txt
+    paths:
+      queue_state: data/accounts/account-1/queue_state.json
+      posted_log: data/accounts/account-1/logs/posted_log.json
+      screenshots: data/accounts/account-1/logs/screenshots
+    posting:
+      template_file: post_1.yaml

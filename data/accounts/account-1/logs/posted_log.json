@@ -1,0 +1,84 @@
+[
+  {
+    "timestamp": "2026-03-24T18:05:40.122380+00:00",
+    "group_id": "amazingamericagroup",
+    "group_name": "Amazing America",
+    "group_url": "https://www.facebook.com/groups/amazingamericagroup/",
+    "template": "post_1.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "CAPTCHA_DETECTED",
+    "screenshot": "logs\\screenshots\\20260324_180540_amazingamericagroup_CAPTCHA_DETECTED.png"
+  },
+  {
+    "timestamp": "2026-03-24T18:10:31.547597+00:00",
+    "group_id": "amazingamericagroup",
+    "group_name": "Amazing America",
+    "group_url": "https://www.facebook.com/groups/amazingamericagroup/",
+    "template": "post_1.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "Could not open group composer",
+    "screenshot": "logs\\screenshots\\20260324_181031_amazingamericagroup_Could_not_open_group_composer.png"
+  },
+  {
+    "timestamp": "2026-03-24T18:17:58.700700+00:00",
+    "group_id": "amazingamericagroup",
+    "group_name": "Amazing America",
+    "group_url": "https://www.facebook.com/groups/amazingamericagroup/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-03-24T18:25:20.339407+00:00",
+    "group_id": "amazingamericagroup",
+    "group_name": "Amazing America",
+    "group_url": "https://www.facebook.com/groups/amazingamericagroup/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for Amazing America"
+  },
+  {
+    "timestamp": "2026-03-24T18:32:02.310866+00:00",
+    "group_id": "177343575632128",
+    "group_name": "Aneka Masakan & Jajanan Area Pare - Kediri 🍝🍣🍲🍛🍩",
+    "group_url": "https://www.facebook.com/groups/177343575632128/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for Aneka Masakan & Jajanan Area Pare - Kediri 🍝🍣🍲🍛🍩"
+  },
+  {
+    "timestamp": "2026-03-24T18:36:39.825209+00:00",
+    "group_id": "beasiswaidcloudhost",
+    "group_name": "Beasiswa IDCloudHost",
+    "group_url": "https://www.facebook.com/groups/beasiswaidcloudhost/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for Beasiswa IDCloudHost"
+  },
+  {
+    "timestamp": "2026-03-24T19:04:03.755799+00:00",
+    "group_id": "899837400506186",
+    "group_name": "BELAJAR CPA DATING",
+    "group_url": "https://www.facebook.com/groups/899837400506186/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for BELAJAR CPA DATING"
+  },
+  {
+    "timestamp": "2026-03-24T19:28:16.216399+00:00",
+    "group_id": "696392201182570",
+    "group_name": "BELAJAR CPA GRATIS",
+    "group_url": "https://www.facebook.com/groups/696392201182570/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for BELAJAR CPA GRATIS"
+  }
+]

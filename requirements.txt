@@ -1,0 +1,6 @@
+camoufox[geoip]
+playwright
+pyyaml
+rich
+Pillow
+schedule

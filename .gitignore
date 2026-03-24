@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+logs/*.log
+data/session.json
+data/posted_log.json
+
+*.zip
