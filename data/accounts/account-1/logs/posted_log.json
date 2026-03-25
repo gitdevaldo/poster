@@ -8,5 +8,15 @@
     "status": "posted",
     "dry_run": false,
     "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-03-25T07:55:31.544238+00:00",
+    "group_id": "384128275059207",
+    "group_name": "BLOGGER INDO JB ADSENSE",
+    "group_url": "https://www.facebook.com/groups/384128275059207/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
   }
 ]

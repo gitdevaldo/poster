@@ -81,16 +81,6 @@
       "sameSite": "None"
     },
     {
-      "name": "fr",
-      "value": "14MdXB7q6mEquI3ZH.AWfJ8Yg0gdW7RQNUto4Zzl5HEe1c029fYCXz_6Ss-XYoYZzsznM.Bpw4of..AAA.0.0.Bpw49p.AWdxSCe1Xhq_g3ODQDtmh-OaUCo",
-      "domain": ".facebook.com",
-      "path": "/",
-      "expires": 1782199913,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "wd",
       "value": "1536x803",
       "domain": ".facebook.com",
@@ -111,12 +101,12 @@
       "sameSite": "None"
     },
     {
-      "name": "presence",
-      "value": "C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1774423919173%2C%22v%22%3A1%7D",
+      "name": "fr",
+      "value": "14MdXB7q6mEquI3ZH.AWfjT_KTgjE6tVpooGvgl3MWdeApW9IM2mkMZMDD6eIrHJpLRTM.Bpw4of..AAA.0.0.Bpw5TS.AWd3_zYYlykLoCHo7HWJ_4Rt-a4",
       "domain": ".facebook.com",
       "path": "/",
-      "expires": -1,
-      "httpOnly": false,
+      "expires": 1782201298,
+      "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     }

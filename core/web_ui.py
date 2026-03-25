@@ -325,7 +325,7 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
         "rest_every_n_posts",
         "rest_duration_minutes",
     }
-    bool_fields = {"dry_run"}
+    bool_fields = {"dry_run", "auto_skip"}
     str_fields = {"rotation_mode", "template_file"}
 
     for key in int_fields:
@@ -1317,6 +1317,13 @@ def _render_page() -> str:
             <option value="false">false</option>
           </select>
         </div>
+        <div class="field">
+          <label class="mini-lbl" for="prAutoSkip">Auto Skip Posted</label>
+          <select id="prAutoSkip">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
       </div>
       <div class="frow">
         <button id="savePostingRulesBtn" class="btn-primary" type="button">💾 Save Posting Rules</button>
@@ -1562,6 +1569,7 @@ def _render_page() -> str:
     document.getElementById('prRestEvery').value = String(p.rest_every_n_posts || '');
     document.getElementById('prRestDuration').value = String(p.rest_duration_minutes || '');
     document.getElementById('prDryRun').value = String(p.dry_run !== false);
+    document.getElementById('prAutoSkip').value = String(!!p.auto_skip);
     document.getElementById('postingRulesModal').classList.add('show');
   }
 
@@ -1996,6 +2004,7 @@ def _render_page() -> str:
       rest_every_n_posts: parseInt((document.getElementById('prRestEvery').value || '').trim(), 10),
       rest_duration_minutes: parseInt((document.getElementById('prRestDuration').value || '').trim(), 10),
       dry_run: document.getElementById('prDryRun').value === 'true',
+      auto_skip: document.getElementById('prAutoSkip').value === 'true',
     };
     if (!payload.template_file || !payload.rotation_mode) {
       toast('Template file and rotation mode are required.', true);
