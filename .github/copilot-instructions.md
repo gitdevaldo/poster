@@ -199,6 +199,7 @@ If the repository is not initialized or no remote exists, document that limitati
 ### 0. Execution Discipline (User Hard Rule)
 
 - Do not add features, options, or behavior changes unless the user explicitly asks for them.
+- If the user asks a question, answer the question only. Do not run commands, edit files, or perform side effects unless the user explicitly asks for action.
 - Before any non-trivial code change, state: exact change, exact reason tied to user request, and impact scope.
 - Keep changes minimal and PRD-aligned; avoid assumption-based improvements.
 - If a possible change is optional, ask for approval before implementing it.
