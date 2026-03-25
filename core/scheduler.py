@@ -571,9 +571,28 @@ def _post_to_group(
             log_event("popup_flow_failed", context={"group": group_name, "reason": "Post button not found or not enabled"})
             return False, "Post button not found"
 
-        page.wait_for_timeout(5000)
+        # Wait for the composer dialog to close, confirming the post was submitted.
+        # The dialog closing is the definitive signal that Facebook accepted the post.
+        dialog_closed = False
+        try:
+            popup_root.wait_for(state="hidden", timeout=30000)
+            dialog_closed = True
+        except Exception:
+            # Fallback: even if wait_for fails, give it extra time
+            page.wait_for_timeout(10000)
+
+        if dialog_closed:
+            log_event("Posting step: composer dialog closed (post confirmed).", context={"group": group_name})
+        else:
+            log_event(
+                "Posting step: composer dialog did not close within timeout, assuming posted.",
+                level="WARNING",
+                context={"group": group_name},
+            )
+
+        page.wait_for_timeout(random.randint(2000, 4000))
         page.goto(home_url, wait_until="domcontentloaded")
-        page.wait_for_timeout(random.randint(600, 1200))
+        page.wait_for_timeout(random.randint(1500, 3000))
         return True, "Posted"
     finally:
         _unlock_background_scroll(page)
