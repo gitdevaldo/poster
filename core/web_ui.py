@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from collections import deque
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +27,7 @@ from core.account_manager import (
 )
 from core.config_loader import ACCOUNT_ENV_VAR
 from core.group_scraper import scrape_groups
+from core.logger import get_log_file
 from core.post_queue import load_templates
 from core.scheduler import run_scheduler
 from core.session_manager import ensure_session, validate_session
@@ -287,6 +289,45 @@ def _save_template_file(template_path: Path, template_data: dict[str, Any]) -> N
     template_path.parent.mkdir(parents=True, exist_ok=True)
     with template_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(template_data, f, sort_keys=False, allow_unicode=True)
+
+
+def _read_live_logs(limit: int = 200) -> list[dict[str, str]]:
+  log_path = get_log_file()
+  if not log_path.exists():
+    return []
+
+  capped_limit = max(20, min(int(limit), 500))
+  rows: deque[dict[str, str]] = deque(maxlen=capped_limit)
+
+  try:
+    with log_path.open("r", encoding="utf-8") as f:
+      for raw_line in f:
+        line = raw_line.strip()
+        if not line:
+          continue
+        try:
+          payload = json.loads(line)
+          timestamp = str(payload.get("timestamp", "")).strip()
+          level = str(payload.get("level", "INFO")).strip().upper() or "INFO"
+          message = str(payload.get("message", "")).strip()
+          context = payload.get("context")
+          if isinstance(context, dict) and context:
+            message = f"{message} | {json.dumps(context, ensure_ascii=False)}"
+          rows.append({
+            "timestamp": timestamp,
+            "level": level,
+            "message": message,
+          })
+        except Exception:
+          rows.append({
+            "timestamp": "",
+            "level": "INFO",
+            "message": line,
+          })
+  except Exception:
+    return []
+
+  return list(rows)
 
 
 def _render_page() -> str:
@@ -583,7 +624,7 @@ def _render_page() -> str:
       text-transform: uppercase; letter-spacing: .07em; color: var(--muted-fg);
       margin-bottom: 10px;
     }
-    .toolbar-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    .toolbar-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 
     .pager {
       display: flex;
@@ -606,6 +647,23 @@ def _render_page() -> str:
       background: var(--muted);
       padding: 12px;
       box-shadow: 4px 4px 0 var(--fg);
+    }
+    .log-wrap {
+      max-height: 220px;
+      overflow: auto;
+    }
+    .log-table th, .log-table td {
+      padding: 7px 9px;
+      font-size: 11px;
+    }
+    .auto-scroll-ctrl {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--heading);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted-fg);
     }
     .field {
       display: flex;
@@ -807,6 +865,27 @@ def _render_page() -> str:
             <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
             <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
           </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="frow" style="justify-content:space-between; margin-bottom:8px">
+          <div class="card-title" style="margin:0">
+            <div class="t-icon ti-green">📝</div>
+            Live Log
+          </div>
+          <label class="auto-scroll-ctrl" for="logAutoScroll">
+            <input id="logAutoScroll" type="checkbox" checked>
+            Auto Scroll
+          </label>
+        </div>
+        <div class="tbl-wrap log-wrap" id="liveLogWrap">
+          <table class="log-table">
+            <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+            <tbody id="liveLogsBody">
+              <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </aside>
@@ -1132,6 +1211,7 @@ def _render_page() -> str:
   let selectedAccount = '';
   let isBusy = false;
   let groupsSnapshot = [];
+  let logsSnapshot = [];
   let templatesSnapshot = [];
   let browserRulesSnapshot = {};
   let globalGroupsSnapshot = {};
@@ -1166,6 +1246,61 @@ def _render_page() -> str:
 
   function resetGroupPaging() {
     groupPage = 1;
+  }
+
+  function formatLogTime(ts) {
+    const value = String(ts || '').trim();
+    if (!value) return '-';
+    const part = value.split('T')[1] || value;
+    return part.replace('Z', '');
+  }
+
+  function renderLiveLogs(rows) {
+    const tbody = document.getElementById('liveLogsBody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><span class="empty-ico">🫙</span><span class="empty-txt">No logs yet</span></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(item => {
+      const level = String(item.level || 'INFO').toUpperCase();
+      return `<tr>
+        <td class="mono">${esc(formatLogTime(item.timestamp))}</td>
+        <td><span class="pill ${level === 'ERROR' ? 'p-orange' : 'p-gray'}">${esc(level)}</span></td>
+        <td>${esc(item.message || '')}</td>
+      </tr>`;
+    }).join('');
+
+    const autoScroll = document.getElementById('logAutoScroll').checked;
+    if (autoScroll) {
+      const wrap = document.getElementById('liveLogWrap');
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+  }
+
+  async function loadLogs() {
+    try {
+      const res = await fetch('/api/logs?limit=200', { cache: 'no-store' });
+      const data = await res.json();
+      logsSnapshot = data.logs || [];
+      renderLiveLogs(logsSnapshot);
+    } catch {
+      // Keep last rendered logs if fetch temporarily fails.
+    }
+  }
+
+  function initLogAutoScrollSetting() {
+    const key = 'fbpost.logAutoScroll';
+    const input = document.getElementById('logAutoScroll');
+    const saved = localStorage.getItem(key);
+    input.checked = saved === null ? true : saved === 'true';
+    input.addEventListener('change', () => {
+      localStorage.setItem(key, input.checked ? 'true' : 'false');
+      if (input.checked) {
+        const wrap = document.getElementById('liveLogWrap');
+        wrap.scrollTop = wrap.scrollHeight;
+      }
+    });
   }
 
   function renderTemplateImagesEditor() {
@@ -1736,8 +1871,13 @@ def _render_page() -> str:
     }
   });
 
+  initLogAutoScrollSetting();
   loadState();
-  setInterval(loadState, 3000);
+  loadLogs();
+  setInterval(() => {
+    loadState();
+    loadLogs();
+  }, 3000);
 </script>
 </body>
 </html>
@@ -1846,6 +1986,14 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                 selected_account = (qs.get("account") or [""])[0].strip() or None
                 payload = _build_state(state.config_path, selected_account)
                 self._send_json({"ok": True, "data": payload, **payload})
+                return
+            if parsed.path == "/api/logs":
+                limit_raw = (qs.get("limit") or ["200"])[0].strip()
+                try:
+                    limit = int(limit_raw)
+                except Exception:
+                    limit = 200
+                self._send_json({"ok": True, "logs": _read_live_logs(limit)})
                 return
             if parsed.path == "/":
                 self._send_html(_render_page())
