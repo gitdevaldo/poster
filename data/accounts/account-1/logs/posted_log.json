@@ -80,5 +80,45 @@
     "status": "posted",
     "dry_run": true,
     "detail": "Dry run: skipped posting for BELAJAR CPA GRATIS"
+  },
+  {
+    "timestamp": "2026-03-25T03:03:19.213354+00:00",
+    "group_id": "953585201390635",
+    "group_name": "Blogger Adsense Indonesia",
+    "group_url": "https://www.facebook.com/groups/953585201390635/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for Blogger Adsense Indonesia"
+  },
+  {
+    "timestamp": "2026-03-25T03:13:19.118438+00:00",
+    "group_id": "384128275059207",
+    "group_name": "BLOGGER INDO JB ADSENSE",
+    "group_url": "https://www.facebook.com/groups/384128275059207/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for BLOGGER INDO JB ADSENSE"
+  },
+  {
+    "timestamp": "2026-03-25T03:21:57.145151+00:00",
+    "group_id": "bloggerindonesiaaa",
+    "group_name": "BLOGGER INDONESIA",
+    "group_url": "https://www.facebook.com/groups/bloggerindonesiaaa/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for BLOGGER INDONESIA"
+  },
+  {
+    "timestamp": "2026-03-25T03:53:12.538110+00:00",
+    "group_id": "blogidn",
+    "group_name": "Blogger Indonesia",
+    "group_url": "https://www.facebook.com/groups/blogidn/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": true,
+    "detail": "Dry run: skipped posting for Blogger Indonesia"
   }
 ]

@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import yaml
+
 from core.account_manager import (
     add_account,
     delete_account,
@@ -16,12 +18,15 @@ from core.account_manager import (
     list_accounts,
     list_groups_for_account,
     load_raw_config,
+    save_raw_config,
+    set_account_template,
     set_account_enabled,
     set_active_account,
     set_group_included,
 )
 from core.config_loader import ACCOUNT_ENV_VAR
 from core.group_scraper import scrape_groups
+from core.post_queue import load_templates
 from core.scheduler import run_scheduler
 from core.session_manager import ensure_session, validate_session
 
@@ -74,13 +79,214 @@ def _build_state(config_path: Path, selected_account: str | None = None) -> dict
             "included": bool(g.get("active", True)),
         })
 
+    posting_cfg = dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {}
+    account_override = accounts.get(account_id, {}) if account_id else {}
+    if isinstance(account_override, dict):
+        account_posting = account_override.get("posting", {})
+        if isinstance(account_posting, dict):
+            posting_cfg.update(account_posting)
+
+    templates: list[dict[str, Any]] = []
+    for tpl in load_templates(Path("templates")):
+        template_file = str(tpl.get("template_file", "")).strip()
+        if not template_file:
+            continue
+        text_value = str(tpl.get("text", "")).strip()
+        tags_value = tpl.get("tags", [])
+        tags: list[str] = []
+        if isinstance(tags_value, list):
+            tags = [str(tag).strip() for tag in tags_value if str(tag).strip()]
+        image_items: list[str] = []
+        single_image = str(tpl.get("image", "")).strip()
+        if single_image:
+            image_items.append(single_image)
+        images_value = tpl.get("images", [])
+        if isinstance(images_value, list):
+            image_items.extend(str(img).strip() for img in images_value if str(img).strip())
+
+        title = str(tpl.get("title", "")).strip() or template_file
+        templates.append({
+            "template_file": template_file,
+            "title": title,
+            "text": text_value,
+            "tags": tags,
+            "images": image_items,
+        })
+
     return {
         "active_account": active,
         "selected_account": account_id,
         "accounts": account_items,
         "groups": group_items,
-        "posting": config.get("posting", {}),
+        "posting": posting_cfg,
+      "global_groups": dict(config.get("groups", {})) if isinstance(config.get("groups"), dict) else {},
+      "global_posting": dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {},
+        "browser": dict(config.get("browser", {})) if isinstance(config.get("browser"), dict) else {},
+        "templates": templates,
     }
+
+
+def _update_browser_rules(config_path: Path, browser_rules: dict[str, Any]) -> tuple[bool, str]:
+    config = load_raw_config(config_path)
+    browser_cfg = dict(config.get("browser", {})) if isinstance(config.get("browser"), dict) else {}
+
+    bool_fields = {"headless", "humanize", "fullscreen"}
+    int_fields = {"screen_max_width", "screen_max_height", "window_width", "window_height"}
+    str_fields = {"locale", "timezone"}
+
+    for key in bool_fields:
+        if key in browser_rules:
+            browser_cfg[key] = bool(browser_rules.get(key))
+
+    for key in int_fields:
+        if key in browser_rules:
+            try:
+                value = int(browser_rules.get(key))
+            except Exception:
+                return False, f"Invalid integer for '{key}'."
+            if value <= 0:
+                return False, f"'{key}' must be greater than 0."
+            browser_cfg[key] = value
+
+    for key in str_fields:
+        if key in browser_rules:
+            value = str(browser_rules.get(key, "")).strip()
+            if not value:
+                return False, f"'{key}' cannot be empty."
+            browser_cfg[key] = value
+
+    config["browser"] = browser_cfg
+    save_raw_config(config_path, config)
+    return True, "Global browser rules updated."
+
+
+def _update_groups_rules(config_path: Path, groups_rules: dict[str, Any]) -> tuple[bool, str]:
+    config = load_raw_config(config_path)
+    groups_cfg = dict(config.get("groups", {})) if isinstance(config.get("groups"), dict) else {}
+
+    int_fields = {
+        "rescrape_every_days",
+        "max_scrolls",
+        "idle_rounds_to_stop",
+        "scroll_wait_ms",
+        "min_scroll_rounds_before_stop",
+    }
+
+    scrape_cfg = dict(groups_cfg.get("scrape", {})) if isinstance(groups_cfg.get("scrape"), dict) else {}
+    for key in int_fields:
+        if key not in groups_rules:
+            continue
+        try:
+            value = int(groups_rules.get(key))
+        except Exception:
+            return False, f"Invalid integer for '{key}'."
+        if value < 0:
+            return False, f"'{key}' must be 0 or greater."
+        if key == "rescrape_every_days":
+            groups_cfg[key] = max(1, value)
+        else:
+            scrape_cfg[key] = value
+
+    groups_cfg["scrape"] = scrape_cfg
+    config["groups"] = groups_cfg
+    save_raw_config(config_path, config)
+    return True, "Global group rules updated."
+
+
+def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> tuple[bool, str]:
+    config = load_raw_config(config_path)
+    posting_cfg = dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {}
+
+    int_fields = {
+        "min_delay_minutes",
+        "max_delay_minutes",
+        "max_posts_per_session",
+        "cooldown_hours",
+        "rest_every_n_posts",
+        "rest_duration_minutes",
+    }
+    bool_fields = {"dry_run"}
+    str_fields = {"rotation_mode", "template_file"}
+
+    for key in int_fields:
+        if key not in posting_rules:
+            continue
+        try:
+            value = int(posting_rules.get(key))
+        except Exception:
+            return False, f"Invalid integer for '{key}'."
+        if value < 0:
+            return False, f"'{key}' must be 0 or greater."
+        posting_cfg[key] = value
+
+    for key in bool_fields:
+        if key in posting_rules:
+            posting_cfg[key] = bool(posting_rules.get(key))
+
+    for key in str_fields:
+        if key in posting_rules:
+            value = str(posting_rules.get(key, "")).strip()
+            if not value:
+                return False, f"'{key}' cannot be empty."
+            posting_cfg[key] = value
+
+    min_delay = int(posting_cfg.get("min_delay_minutes", 0))
+    max_delay = int(posting_cfg.get("max_delay_minutes", 0))
+    if min_delay > max_delay:
+        return False, "'min_delay_minutes' cannot be greater than 'max_delay_minutes'."
+
+    config["posting"] = posting_cfg
+    save_raw_config(config_path, config)
+    return True, "Global posting rules updated."
+
+
+def _normalize_template_data(template_data: dict[str, Any]) -> dict[str, Any]:
+    title = str(template_data.get("title", "")).strip()
+    text = str(template_data.get("text", "")).strip()
+
+    tags_raw = template_data.get("tags", [])
+    tags: list[str] = []
+    if isinstance(tags_raw, list):
+        tags = [str(tag).strip() for tag in tags_raw if str(tag).strip()]
+    elif isinstance(tags_raw, str):
+        tags = [item.strip() for item in tags_raw.split(",") if item.strip()]
+
+    images_raw = template_data.get("images", [])
+    images: list[str] = []
+    if isinstance(images_raw, list):
+        images = [str(path).strip() for path in images_raw if str(path).strip()]
+    elif isinstance(images_raw, str):
+        images = [item.strip() for item in images_raw.splitlines() if item.strip()]
+
+    payload: dict[str, Any] = {
+        "title": title,
+        "text": text,
+        "images": images,
+        "tags": tags,
+    }
+    return payload
+
+
+def _next_template_filename(template_dir: Path) -> str:
+    used_indices: set[int] = set()
+    for path in template_dir.glob("post_*.yaml"):
+        stem = path.stem
+        if not stem.startswith("post_"):
+            continue
+        suffix = stem[5:]
+        if suffix.isdigit():
+            used_indices.add(int(suffix))
+
+    next_index = 1
+    while next_index in used_indices:
+        next_index += 1
+    return f"post_{next_index}.yaml"
+
+
+def _save_template_file(template_path: Path, template_data: dict[str, Any]) -> None:
+    template_path.parent.mkdir(parents=True, exist_ok=True)
+    with template_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(template_data, f, sort_keys=False, allow_unicode=True)
 
 
 def _render_page() -> str:
@@ -200,7 +406,7 @@ def _render_page() -> str:
     /* ── Grid ───────────────────────────── */
     .main-grid {
       display: grid;
-      grid-template-columns: 310px 1fr;
+      grid-template-columns: 40% 60%;
       gap: 20px;
       align-items: start;
     }
@@ -275,7 +481,7 @@ def _render_page() -> str:
     /* ── Form row ───────────────────────── */
     .frow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
 
-    input[type=text], select {
+    input[type=text], select, textarea {
       height: 40px; padding: 0 13px;
       border: 2px solid var(--fg); border-radius: var(--r-md);
       background: var(--card); color: var(--fg);
@@ -284,11 +490,20 @@ def _render_page() -> str:
       box-shadow: 4px 4px 0 transparent;
       transition: box-shadow .18s var(--bounce), border-color .15s;
     }
-    input[type=text]:focus, select:focus {
+    input[type=text]:focus, select:focus, textarea:focus {
       border-color: var(--accent);
       box-shadow: 4px 4px 0 var(--accent);
     }
     input[type=text] { font-family: 'Courier New', monospace; font-size: 12px; min-width: 180px; }
+    textarea {
+      height: auto;
+      min-height: 140px;
+      padding: 10px 12px;
+      resize: vertical;
+      width: 100%;
+      font-family: var(--body);
+      line-height: 1.45;
+    }
     select { cursor: pointer; }
 
     /* ── Buttons ────────────────────────── */
@@ -370,6 +585,36 @@ def _render_page() -> str:
     }
     .toolbar-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .pager-info {
+      font-family: var(--heading);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted-fg);
+    }
+
+    .settings-box {
+      margin-top: 14px;
+      border: 2px solid var(--fg);
+      border-radius: var(--r-md);
+      background: var(--muted);
+      padding: 12px;
+      box-shadow: 4px 4px 0 var(--fg);
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 180px;
+      flex: 1;
+    }
+
     /* ── Divider ────────────────────────── */
     .divider {
       display: flex; align-items: center; gap: 10px;
@@ -388,6 +633,78 @@ def _render_page() -> str:
     .empty { text-align: center; padding: 34px 16px; color: var(--muted-fg); }
     .empty-ico { font-size: 38px; display: block; margin-bottom: 8px; }
     .empty-txt { font-family: var(--heading); font-weight: 700; font-size: 14px; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(30, 41, 59, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 16px;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal-card {
+      width: min(760px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--card);
+      border: 2px solid var(--fg);
+      border-radius: var(--r-lg);
+      box-shadow: 8px 8px 0 var(--fg);
+      padding: 18px;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .preview-box {
+      border: 2px solid var(--fg);
+      border-radius: var(--r-md);
+      background: var(--muted);
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .preview-text {
+      white-space: pre-wrap;
+      max-height: 210px;
+      overflow: auto;
+      margin-top: 8px;
+    }
+    .mini-lbl {
+      font-family: var(--heading);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted-fg);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+    .img-list {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .img-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 2px solid var(--fg);
+      border-radius: var(--r-md);
+      background: var(--card);
+      padding: 6px 8px;
+    }
+    .img-item .mono {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* ── Toast ──────────────────────────── */
     #toast {
@@ -479,6 +796,18 @@ def _render_page() -> str:
             </tbody>
           </table>
         </div>
+
+        <div class="settings-box">
+          <div class="mini-lbl">Global Settings</div>
+          <div id="browserRulesSummary" class="mono" style="margin-bottom:6px">Browser: loading…</div>
+          <div id="groupsRulesSummary" class="mono" style="margin-bottom:6px">Groups: loading…</div>
+          <div id="postingRulesSummary" class="mono" style="margin-bottom:10px">Posting: loading…</div>
+          <div class="frow" style="margin:0">
+            <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
+            <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
+            <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -516,6 +845,12 @@ def _render_page() -> str:
             <option value="included">Included only</option>
             <option value="excluded">Excluded only</option>
           </select>
+          <select id="groupPerPage">
+            <option value="20">20 / page</option>
+            <option value="40">40 / page</option>
+            <option value="60">60 / page</option>
+            <option value="all">All</option>
+          </select>
         </div>
 
         <div class="tbl-wrap">
@@ -527,6 +862,12 @@ def _render_page() -> str:
           </table>
         </div>
 
+        <div class="pager">
+          <button id="groupPrevPage" type="button">← Prev</button>
+          <span id="groupPageInfo" class="pager-info">Page 1 / 1</span>
+          <button id="groupNextPage" type="button">Next →</button>
+        </div>
+
       </div>
     </section>
   </div>
@@ -534,10 +875,270 @@ def _render_page() -> str:
 
 <div id="toast" role="alert" aria-live="polite"></div>
 
+<div id="templateModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-yellow">🧩</div>
+        <span id="templateModalTitle">Choose Template</span>
+      </div>
+      <button id="closeTemplateModal" type="button">✕ Close</button>
+    </div>
+
+    <div class="frow">
+      <select id="templateSelect" style="flex:1;min-width:240px"></select>
+      <button id="applyTemplateBtn" class="btn-primary" type="button">Use Template</button>
+    </div>
+
+    <div class="preview-box">
+      <div><strong>Title:</strong> <span id="templatePreviewTitle">—</span></div>
+      <div style="margin-top:6px"><strong>File:</strong> <span class="mono" id="templatePreviewFile">—</span></div>
+      <div style="margin-top:6px"><strong>Tags:</strong> <span id="templatePreviewTags">—</span></div>
+      <div style="margin-top:6px"><strong>Images:</strong> <span id="templatePreviewImages">0</span></div>
+      <div class="preview-text" id="templatePreviewText">No preview.</div>
+    </div>
+
+    <div class="frow" style="margin-top:12px">
+      <button id="openEditTemplateBtn" class="btn-yellow" type="button">✏️ Edit Post</button>
+      <button id="openAddTemplateBtn" class="btn-primary" type="button">➕ Add Post</button>
+    </div>
+  </div>
+</div>
+
+<div id="templateEditorModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="templateEditorModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-yellow">📝</div>
+        <span id="templateEditorModalTitle">Edit Template Content</span>
+      </div>
+      <button id="closeTemplateEditorModal" type="button">✕ Close</button>
+    </div>
+
+    <div class="preview-box" style="margin-top:0">
+      <div class="mini-lbl">Template Content</div>
+      <div class="frow" style="margin-bottom:10px">
+        <input id="tplEditTitle" type="text" placeholder="Template title (display only)" style="flex:1;min-width:220px">
+      </div>
+      <div class="frow" style="margin-bottom:10px">
+        <input id="tplEditTags" type="text" placeholder="tags comma separated (example: promo, vps, github)" style="flex:1;min-width:220px">
+      </div>
+      <div class="frow" style="margin-bottom:10px">
+        <textarea id="tplEditText" placeholder="Post text..."></textarea>
+      </div>
+
+      <div class="mini-lbl">Images</div>
+      <div id="tplImagesList" class="img-list"></div>
+      <div class="frow" style="margin-bottom:10px">
+        <input id="tplNewImage" type="text" placeholder="templates/images/your-image.png" style="flex:1;min-width:220px">
+        <button id="tplAddImageBtn" class="btn-green" type="button">+ Add Image</button>
+      </div>
+
+      <div class="frow">
+        <button id="saveTemplateBtn" class="btn-yellow" type="button">💾 Save Selected Template</button>
+        <button id="createTemplateBtn" class="btn-primary" type="button">➕ Create New Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="browserRulesModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="browserRulesModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-violet">🌐</div>
+        <span id="browserRulesModalTitle">Global Browser Rules</span>
+      </div>
+      <button id="closeBrowserRulesModal" type="button">✕ Close</button>
+    </div>
+
+    <div class="preview-box" style="margin-top:0">
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="brHeadless">Headless</label>
+          <select id="brHeadless">
+            <option value="false">false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="brHumanize">Humanize</label>
+          <select id="brHumanize">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="brFullscreen">Fullscreen</label>
+          <select id="brFullscreen">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="brLocale">Locale</label>
+          <input id="brLocale" type="text" placeholder="example: id-ID">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="brTimezone">Timezone</label>
+          <input id="brTimezone" type="text" placeholder="example: Asia/Jakarta">
+        </div>
+      </div>
+
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="brScreenMaxWidth">Screen Max Width</label>
+          <input id="brScreenMaxWidth" type="text" placeholder="1536">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="brScreenMaxHeight">Screen Max Height</label>
+          <input id="brScreenMaxHeight" type="text" placeholder="864">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="brWindowWidth">Window Width</label>
+          <input id="brWindowWidth" type="text" placeholder="1536">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="brWindowHeight">Window Height</label>
+          <input id="brWindowHeight" type="text" placeholder="864">
+        </div>
+      </div>
+
+      <div class="frow">
+        <button id="saveBrowserRulesBtn" class="btn-primary" type="button">💾 Save Browser Rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="groupsRulesModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="groupsRulesModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-yellow">👥</div>
+        <span id="groupsRulesModalTitle">Global Groups Rules</span>
+      </div>
+      <button id="closeGroupsRulesModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="grRescrapeDays">Rescrape Every Days</label>
+          <input id="grRescrapeDays" type="text" placeholder="7">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="grMaxScrolls">Max Scrolls</label>
+          <input id="grMaxScrolls" type="text" placeholder="30">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="grIdleRounds">Idle Rounds To Stop</label>
+          <input id="grIdleRounds" type="text" placeholder="4">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="grScrollWaitMs">Scroll Wait (ms)</label>
+          <input id="grScrollWaitMs" type="text" placeholder="1400">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="grMinRounds">Min Scroll Rounds Before Stop</label>
+          <input id="grMinRounds" type="text" placeholder="8">
+        </div>
+      </div>
+      <div class="frow">
+        <button id="saveGroupsRulesBtn" class="btn-primary" type="button">💾 Save Groups Rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="postingRulesModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="postingRulesModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-green">📝</div>
+        <span id="postingRulesModalTitle">Global Posting Rules</span>
+      </div>
+      <button id="closePostingRulesModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="prTemplateFile">Template File</label>
+          <input id="prTemplateFile" type="text" placeholder="post_1.yaml">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prRotationMode">Rotation Mode</label>
+          <select id="prRotationMode">
+            <option value="single">single</option>
+            <option value="sequential">sequential</option>
+            <option value="round-robin">round-robin</option>
+            <option value="random">random</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="prMinDelay">Min Delay (minutes)</label>
+          <input id="prMinDelay" type="text" placeholder="3">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prMaxDelay">Max Delay (minutes)</label>
+          <input id="prMaxDelay" type="text" placeholder="5">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="prMaxPosts">Max Posts Per Session</label>
+          <input id="prMaxPosts" type="text" placeholder="15">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prCooldown">Cooldown Hours</label>
+          <input id="prCooldown" type="text" placeholder="24">
+        </div>
+      </div>
+      <div class="frow">
+        <div class="field">
+          <label class="mini-lbl" for="prRestEvery">Rest Every N Posts</label>
+          <input id="prRestEvery" type="text" placeholder="10">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prRestDuration">Rest Duration (minutes)</label>
+          <input id="prRestDuration" type="text" placeholder="30">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prDryRun">Dry Run</label>
+          <select id="prDryRun">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <button id="savePostingRulesBtn" class="btn-primary" type="button">💾 Save Posting Rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   let selectedAccount = '';
   let isBusy = false;
   let groupsSnapshot = [];
+  let templatesSnapshot = [];
+  let browserRulesSnapshot = {};
+  let globalGroupsSnapshot = {};
+  let globalPostingSnapshot = {};
+  let templateEditImages = [];
+  let templateEditorMode = 'edit';
+  let groupPage = 1;
   let toastTimer = null;
 
   function esc(v) {
@@ -563,23 +1164,241 @@ def _render_page() -> str:
     document.querySelectorAll('button').forEach(btn => btn.disabled = !!b);
   }
 
-  async function callAction(action, accountId, groupId = '') {
+  function resetGroupPaging() {
+    groupPage = 1;
+  }
+
+  function renderTemplateImagesEditor() {
+    const wrap = document.getElementById('tplImagesList');
+    if (!templateEditImages.length) {
+      wrap.innerHTML = '<div class="mono">No images added.</div>';
+      return;
+    }
+    wrap.innerHTML = templateEditImages.map((img, idx) =>
+      `<div class="img-item"><span class="mono">${esc(img)}</span><button class="sm-btn btn-red" type="button" onclick="removeTemplateImage(${idx})">Remove</button></div>`
+    ).join('');
+  }
+
+  function removeTemplateImage(index) {
+    templateEditImages = templateEditImages.filter((_, i) => i !== index);
+    renderTemplateImagesEditor();
+  }
+
+  function buildTemplatePayloadFromEditor() {
+    const tagsRaw = (document.getElementById('tplEditTags').value || '').trim();
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+    return {
+      title: (document.getElementById('tplEditTitle').value || '').trim(),
+      text: (document.getElementById('tplEditText').value || ''),
+      tags,
+      images: templateEditImages.slice(),
+    };
+  }
+
+  function fillTemplateEditor(item) {
+    document.getElementById('tplEditTitle').value = item ? (item.title || '') : '';
+    document.getElementById('tplEditTags').value = item && (item.tags || []).length ? item.tags.join(', ') : '';
+    document.getElementById('tplEditText').value = item ? (item.text || '') : '';
+    templateEditImages = item ? (item.images || []).slice() : [];
+    renderTemplateImagesEditor();
+  }
+
+  async function callAction(
+    action,
+    accountId,
+    groupId = '',
+    templateFile = '',
+    templateData = {},
+    browserRules = {},
+    groupsRules = {},
+    postingRules = {}
+  ) {
     if (isBusy) return;
     setBusy(true);
     try {
       const res = await fetch('/api/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, account_id: accountId, group_id: groupId })
+        body: JSON.stringify({
+          action,
+          account_id: accountId,
+          group_id: groupId,
+          template_file: templateFile,
+          template_data: templateData,
+          browser_rules: browserRules,
+          groups_rules: groupsRules,
+          posting_rules: postingRules,
+        })
       });
       const data = await res.json();
       data.ok ? toast(data.message || 'Done!') : toast(data.error || 'Failed.', true);
+      return data;
     } catch (e) {
       toast(String(e), true);
+      return { ok: false, error: String(e) };
     } finally {
       setBusy(false);
       await loadState();
     }
+  }
+
+  function closeTemplateModal() {
+    document.getElementById('templateModal').classList.remove('show');
+  }
+
+  function renderBrowserRulesSummary(rules) {
+    const locale = String(rules.locale || '-');
+    const timezone = String(rules.timezone || '-');
+    const headless = rules.headless ? 'true' : 'false';
+    const humanize = rules.humanize ? 'true' : 'false';
+    document.getElementById('browserRulesSummary').textContent = `Locale ${locale} | TZ ${timezone} | Headless ${headless} | Humanize ${humanize}`;
+  }
+
+  function renderGroupsRulesSummary(rules) {
+    const scrape = rules.scrape || {};
+    document.getElementById('groupsRulesSummary').textContent =
+      `Rescrape ${rules.rescrape_every_days || '-'}d | Scrolls ${scrape.max_scrolls || '-'} | IdleStop ${scrape.idle_rounds_to_stop || '-'}`;
+  }
+
+  function renderPostingRulesSummary(rules) {
+    document.getElementById('postingRulesSummary').textContent =
+      `Template ${rules.template_file || '-'} | Mode ${rules.rotation_mode || '-'} | Delay ${rules.min_delay_minutes || '-'}-${rules.max_delay_minutes || '-'}m`;
+  }
+
+  function openBrowserRulesModal() {
+    const r = browserRulesSnapshot || {};
+    document.getElementById('brHeadless').value = String(!!r.headless);
+    document.getElementById('brHumanize').value = String(r.humanize !== false);
+    document.getElementById('brFullscreen').value = String(r.fullscreen !== false);
+    document.getElementById('brLocale').value = String(r.locale || '');
+    document.getElementById('brTimezone').value = String(r.timezone || '');
+    document.getElementById('brScreenMaxWidth').value = String(r.screen_max_width || '');
+    document.getElementById('brScreenMaxHeight').value = String(r.screen_max_height || '');
+    document.getElementById('brWindowWidth').value = String(r.window_width || '');
+    document.getElementById('brWindowHeight').value = String(r.window_height || '');
+    document.getElementById('browserRulesModal').classList.add('show');
+  }
+
+  function closeBrowserRulesModal() {
+    document.getElementById('browserRulesModal').classList.remove('show');
+  }
+
+  function openGroupsRulesModal() {
+    const g = globalGroupsSnapshot || {};
+    const s = g.scrape || {};
+    document.getElementById('grRescrapeDays').value = String(g.rescrape_every_days || '');
+    document.getElementById('grMaxScrolls').value = String(s.max_scrolls || '');
+    document.getElementById('grIdleRounds').value = String(s.idle_rounds_to_stop || '');
+    document.getElementById('grScrollWaitMs').value = String(s.scroll_wait_ms || '');
+    document.getElementById('grMinRounds').value = String(s.min_scroll_rounds_before_stop || '');
+    document.getElementById('groupsRulesModal').classList.add('show');
+  }
+
+  function closeGroupsRulesModal() {
+    document.getElementById('groupsRulesModal').classList.remove('show');
+  }
+
+  function openPostingRulesModal() {
+    const p = globalPostingSnapshot || {};
+    document.getElementById('prTemplateFile').value = String(p.template_file || '');
+    document.getElementById('prRotationMode').value = String(p.rotation_mode || 'single');
+    document.getElementById('prMinDelay').value = String(p.min_delay_minutes || '');
+    document.getElementById('prMaxDelay').value = String(p.max_delay_minutes || '');
+    document.getElementById('prMaxPosts').value = String(p.max_posts_per_session || '');
+    document.getElementById('prCooldown').value = String(p.cooldown_hours || '');
+    document.getElementById('prRestEvery').value = String(p.rest_every_n_posts || '');
+    document.getElementById('prRestDuration').value = String(p.rest_duration_minutes || '');
+    document.getElementById('prDryRun').value = String(p.dry_run !== false);
+    document.getElementById('postingRulesModal').classList.add('show');
+  }
+
+  function closePostingRulesModal() {
+    document.getElementById('postingRulesModal').classList.remove('show');
+  }
+
+  function closeTemplateEditorModal() {
+    document.getElementById('templateEditorModal').classList.remove('show');
+  }
+
+  function openTemplateEditorModal(mode) {
+    templateEditorMode = mode === 'add' ? 'add' : 'edit';
+    const titleEl = document.getElementById('templateEditorModalTitle');
+    const saveBtn = document.getElementById('saveTemplateBtn');
+    const createBtn = document.getElementById('createTemplateBtn');
+
+    if (templateEditorMode === 'edit') {
+      titleEl.textContent = 'Edit Template Content';
+      saveBtn.style.display = '';
+      createBtn.style.display = 'none';
+      const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
+      const item = templatesSnapshot.find(t => t.template_file === selectedTemplate) || null;
+      fillTemplateEditor(item);
+    } else {
+      titleEl.textContent = 'Add New Post';
+      saveBtn.style.display = 'none';
+      createBtn.style.display = '';
+      fillTemplateEditor(null);
+    }
+
+    document.getElementById('templateEditorModal').classList.add('show');
+  }
+
+  function updateTemplatePreview(templateFile) {
+    const item = templatesSnapshot.find(t => t.template_file === templateFile);
+    if (!item) {
+      document.getElementById('templatePreviewTitle').textContent = '—';
+      document.getElementById('templatePreviewFile').textContent = '—';
+      document.getElementById('templatePreviewTags').textContent = '—';
+      document.getElementById('templatePreviewImages').textContent = '0';
+      document.getElementById('templatePreviewText').textContent = 'No preview.';
+      fillTemplateEditor(null);
+      return;
+    }
+
+    document.getElementById('templatePreviewTitle').textContent = item.title || item.template_file;
+    document.getElementById('templatePreviewFile').textContent = item.template_file || '—';
+    document.getElementById('templatePreviewTags').textContent = (item.tags || []).length ? item.tags.join(', ') : '—';
+    document.getElementById('templatePreviewImages').textContent = String((item.images || []).length);
+    document.getElementById('templatePreviewText').textContent = item.text || '(Template has no text)';
+    fillTemplateEditor(item);
+  }
+
+  function renderTemplatePicker(data) {
+    templatesSnapshot = data.templates || [];
+    const selectedTemplate = String((data.posting || {}).template_file || '').trim();
+    const sel = document.getElementById('templateSelect');
+
+    if (!templatesSnapshot.length) {
+      sel.innerHTML = '<option value="">No templates found</option>';
+      updateTemplatePreview('');
+      return;
+    }
+
+    sel.innerHTML = templatesSnapshot.map(t => {
+      const title = t.title || t.template_file;
+      return `<option value="${esc(t.template_file)}">${esc(title)} (${esc(t.template_file)})</option>`;
+    }).join('');
+
+    if (selectedTemplate && templatesSnapshot.some(t => t.template_file === selectedTemplate)) {
+      sel.value = selectedTemplate;
+    }
+    updateTemplatePreview(sel.value || '');
+  }
+
+  async function openTemplateModal(accountId = '') {
+    const target = (accountId || '').trim();
+    if (target && target !== selectedAccount) {
+      selectedAccount = target;
+      resetGroupPaging();
+      await loadState();
+    }
+    if (!selectedAccount) {
+      toast('Please select an account first.', true);
+      return;
+    }
+    document.getElementById('templateModal').classList.add('show');
+    const sel = document.getElementById('templateSelect');
+    updateTemplatePreview(sel.value || '');
   }
 
   function renderAccounts(data) {
@@ -605,8 +1424,8 @@ def _render_page() -> str:
       const sp  = a.enabled
         ? `<span class="pill p-green">● On</span>`
         : `<span class="pill p-orange">● Off</span>`;
-      const act = a.is_active ? `<span class="pill p-yellow" style="margin-left:3px">⚡</span>` : '';
       const btns = [
+        `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')">🧩</button>`,
         `<button class="sm-btn btn-yellow" type="button" onclick="callAction('set_active','${esc(a.id)}')">⚡</button>`,
         a.enabled
           ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')">⏸</button>`
@@ -616,7 +1435,7 @@ def _render_page() -> str:
       return `<tr>
         <td>
           <a href="#" class="mono" style="color:var(--accent);font-weight:700;text-decoration:none"
-             onclick="selectAccount('${esc(a.id)}');return false;">${esc(a.id)}</a>${act}
+             onclick="selectAccount('${esc(a.id)}');return false;">${esc(a.id)}</a>
         </td>
         <td>${sp}</td>
         <td><div style="display:flex;gap:5px;flex-wrap:wrap">${btns.join('')}</div></td>
@@ -628,6 +1447,9 @@ def _render_page() -> str:
     const raw = data.groups || [];
     const txt = (document.getElementById('groupFilter').value || '').trim().toLowerCase();
     const sf  = document.getElementById('groupStatusFilter').value || 'all';
+    const perPageRaw = document.getElementById('groupPerPage').value || '20';
+    const showAll = perPageRaw === 'all';
+    const perPage = showAll ? 0 : Math.max(1, parseInt(perPageRaw, 10) || 20);
     const rows = raw.filter(g => {
       const m  = !txt || String(g.id).toLowerCase().includes(txt) || String(g.name).toLowerCase().includes(txt);
       const inc = !!g.included;
@@ -636,12 +1458,34 @@ def _render_page() -> str:
 
     document.getElementById('groupCount').textContent = `${rows.length} / ${raw.length}`;
 
-    const tbody = document.getElementById('groupsBody');
+    const totalPages = showAll ? 1 : Math.max(1, Math.ceil(rows.length / perPage));
+    if (groupPage > totalPages) groupPage = totalPages;
+    if (groupPage < 1) groupPage = 1;
+
+    const pageRows = showAll
+      ? rows
+      : rows.slice((groupPage - 1) * perPage, groupPage * perPage);
+
+    const prevBtn = document.getElementById('groupPrevPage');
+    const nextBtn = document.getElementById('groupNextPage');
+    const info = document.getElementById('groupPageInfo');
+
     if (!rows.length) {
+      info.textContent = 'Page 0 / 0';
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+    } else {
+      info.textContent = `Page ${groupPage} / ${totalPages}`;
+      prevBtn.disabled = groupPage <= 1;
+      nextBtn.disabled = groupPage >= totalPages;
+    }
+
+    const tbody = document.getElementById('groupsBody');
+    if (!pageRows.length) {
       tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><span class="empty-ico">🫙</span><span class="empty-txt">No groups match filter</span></div></td></tr>';
       return;
     }
-    tbody.innerHTML = rows.map(g => {
+    tbody.innerHTML = pageRows.map(g => {
       const inc = !!g.included;
       return `<tr>
         <td class="mono">${esc(g.id)}</td>
@@ -665,6 +1509,13 @@ def _render_page() -> str:
       const data = await res.json();
       selectedAccount = data.selected_account || data.active_account || '';
       groupsSnapshot  = data.groups || [];
+      browserRulesSnapshot = data.browser || {};
+      globalGroupsSnapshot = data.global_groups || {};
+      globalPostingSnapshot = data.global_posting || {};
+      renderTemplatePicker(data);
+      renderBrowserRulesSummary(browserRulesSnapshot);
+      renderGroupsRulesSummary(globalGroupsSnapshot);
+      renderPostingRulesSummary(globalPostingSnapshot);
       document.getElementById('selectedTitle').textContent =
         selectedAccount ? `Actions — ${selectedAccount}` : 'Select an account';
       renderAccounts(data);
@@ -675,7 +1526,11 @@ def _render_page() -> str:
     }
   }
 
-  function selectAccount(id) { selectedAccount = id; loadState(); }
+  function selectAccount(id) {
+    selectedAccount = id;
+    resetGroupPaging();
+    loadState();
+  }
 
   document.getElementById('addAccountBtn').addEventListener('click', async () => {
     const inp = document.getElementById('newAccountId');
@@ -692,11 +1547,193 @@ def _render_page() -> str:
     await callAction(btn.dataset.action, selectedAccount);
   });
 
-  document.getElementById('groupFilter').addEventListener('input',        () => renderGroups({ groups: groupsSnapshot }));
-  document.getElementById('groupStatusFilter').addEventListener('change', () => renderGroups({ groups: groupsSnapshot }));
+  document.getElementById('closeTemplateModal').addEventListener('click', closeTemplateModal);
+  document.getElementById('templateModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'templateModal') closeTemplateModal();
+  });
+  document.getElementById('closeTemplateEditorModal').addEventListener('click', closeTemplateEditorModal);
+  document.getElementById('templateEditorModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'templateEditorModal') closeTemplateEditorModal();
+  });
+  document.getElementById('openEditTemplateBtn').addEventListener('click', () => {
+    const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
+    if (!selectedTemplate) {
+      toast('Select a template first.', true);
+      return;
+    }
+    openTemplateEditorModal('edit');
+  });
+  document.getElementById('openAddTemplateBtn').addEventListener('click', () => {
+    openTemplateEditorModal('add');
+  });
+  document.getElementById('templateSelect').addEventListener('change', ev => {
+    updateTemplatePreview((ev.target.value || '').trim());
+  });
+  document.getElementById('tplAddImageBtn').addEventListener('click', () => {
+    const inp = document.getElementById('tplNewImage');
+    const value = (inp.value || '').trim();
+    if (!value) {
+      toast('Image path is required.', true);
+      return;
+    }
+    templateEditImages.push(value);
+    inp.value = '';
+    renderTemplateImagesEditor();
+  });
+  document.getElementById('applyTemplateBtn').addEventListener('click', async () => {
+    const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
+    if (!selectedTemplate) {
+      toast('Template is required.', true);
+      return;
+    }
+    if (!selectedAccount) {
+      toast('Please select an account first.', true);
+      return;
+    }
+    await callAction('set_template', selectedAccount, '', selectedTemplate);
+    closeTemplateModal();
+  });
+  document.getElementById('saveTemplateBtn').addEventListener('click', async () => {
+    const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
+    if (!selectedTemplate) {
+      toast('Select a template first.', true);
+      return;
+    }
+    const payload = buildTemplatePayloadFromEditor();
+    await callAction('save_template', selectedAccount, '', selectedTemplate, payload);
+    updateTemplatePreview(selectedTemplate);
+    closeTemplateEditorModal();
+  });
+  document.getElementById('createTemplateBtn').addEventListener('click', async () => {
+    const payload = buildTemplatePayloadFromEditor();
+    if (!String(payload.text || '').trim()) {
+      toast('Post text is required to create a new post.', true);
+      return;
+    }
+    const result = await callAction('create_template', selectedAccount, '', '', payload);
+    if (!result || !result.ok) {
+      return;
+    }
+    const latestSelect = document.getElementById('templateSelect');
+    const options = Array.from(latestSelect.options).map(o => o.value).filter(Boolean);
+    if (options.length) {
+      latestSelect.value = options[options.length - 1];
+      updateTemplatePreview(latestSelect.value);
+    }
+    closeTemplateEditorModal();
+  });
+
+  document.getElementById('groupFilter').addEventListener('input', () => {
+    resetGroupPaging();
+    renderGroups({ groups: groupsSnapshot });
+  });
+  document.getElementById('groupStatusFilter').addEventListener('change', () => {
+    resetGroupPaging();
+    renderGroups({ groups: groupsSnapshot });
+  });
+  document.getElementById('groupPerPage').addEventListener('change', () => {
+    resetGroupPaging();
+    renderGroups({ groups: groupsSnapshot });
+  });
+  document.getElementById('groupPrevPage').addEventListener('click', () => {
+    groupPage = Math.max(1, groupPage - 1);
+    renderGroups({ groups: groupsSnapshot });
+  });
+  document.getElementById('groupNextPage').addEventListener('click', () => {
+    groupPage += 1;
+    renderGroups({ groups: groupsSnapshot });
+  });
+  document.getElementById('openBrowserRulesBtn').addEventListener('click', openBrowserRulesModal);
+  document.getElementById('openGroupsRulesBtn').addEventListener('click', openGroupsRulesModal);
+  document.getElementById('openPostingRulesBtn').addEventListener('click', openPostingRulesModal);
+  document.getElementById('closeBrowserRulesModal').addEventListener('click', closeBrowserRulesModal);
+  document.getElementById('browserRulesModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'browserRulesModal') closeBrowserRulesModal();
+  });
+  document.getElementById('closeGroupsRulesModal').addEventListener('click', closeGroupsRulesModal);
+  document.getElementById('groupsRulesModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'groupsRulesModal') closeGroupsRulesModal();
+  });
+  document.getElementById('closePostingRulesModal').addEventListener('click', closePostingRulesModal);
+  document.getElementById('postingRulesModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'postingRulesModal') closePostingRulesModal();
+  });
+  document.getElementById('saveBrowserRulesBtn').addEventListener('click', async () => {
+    const payload = {
+      headless: document.getElementById('brHeadless').value === 'true',
+      humanize: document.getElementById('brHumanize').value === 'true',
+      fullscreen: document.getElementById('brFullscreen').value === 'true',
+      locale: (document.getElementById('brLocale').value || '').trim(),
+      timezone: (document.getElementById('brTimezone').value || '').trim(),
+      screen_max_width: parseInt((document.getElementById('brScreenMaxWidth').value || '').trim(), 10),
+      screen_max_height: parseInt((document.getElementById('brScreenMaxHeight').value || '').trim(), 10),
+      window_width: parseInt((document.getElementById('brWindowWidth').value || '').trim(), 10),
+      window_height: parseInt((document.getElementById('brWindowHeight').value || '').trim(), 10),
+    };
+
+    if (!payload.locale || !payload.timezone) {
+      toast('Locale and timezone are required.', true);
+      return;
+    }
+    if ([payload.screen_max_width, payload.screen_max_height, payload.window_width, payload.window_height].some(Number.isNaN)) {
+      toast('Screen/window sizes must be valid integers.', true);
+      return;
+    }
+
+    const result = await callAction('update_browser_rules', selectedAccount || '', '', '', {}, payload);
+    if (result && result.ok) closeBrowserRulesModal();
+  });
+  document.getElementById('saveGroupsRulesBtn').addEventListener('click', async () => {
+    const payload = {
+      rescrape_every_days: parseInt((document.getElementById('grRescrapeDays').value || '').trim(), 10),
+      max_scrolls: parseInt((document.getElementById('grMaxScrolls').value || '').trim(), 10),
+      idle_rounds_to_stop: parseInt((document.getElementById('grIdleRounds').value || '').trim(), 10),
+      scroll_wait_ms: parseInt((document.getElementById('grScrollWaitMs').value || '').trim(), 10),
+      min_scroll_rounds_before_stop: parseInt((document.getElementById('grMinRounds').value || '').trim(), 10),
+    };
+    if (Object.values(payload).some(Number.isNaN)) {
+      toast('Groups rules values must be valid integers.', true);
+      return;
+    }
+    const result = await callAction('update_groups_rules', selectedAccount || '', '', '', {}, {}, payload, {});
+    if (result && result.ok) closeGroupsRulesModal();
+  });
+  document.getElementById('savePostingRulesBtn').addEventListener('click', async () => {
+    const payload = {
+      template_file: (document.getElementById('prTemplateFile').value || '').trim(),
+      rotation_mode: (document.getElementById('prRotationMode').value || '').trim(),
+      min_delay_minutes: parseInt((document.getElementById('prMinDelay').value || '').trim(), 10),
+      max_delay_minutes: parseInt((document.getElementById('prMaxDelay').value || '').trim(), 10),
+      max_posts_per_session: parseInt((document.getElementById('prMaxPosts').value || '').trim(), 10),
+      cooldown_hours: parseInt((document.getElementById('prCooldown').value || '').trim(), 10),
+      rest_every_n_posts: parseInt((document.getElementById('prRestEvery').value || '').trim(), 10),
+      rest_duration_minutes: parseInt((document.getElementById('prRestDuration').value || '').trim(), 10),
+      dry_run: document.getElementById('prDryRun').value === 'true',
+    };
+    if (!payload.template_file || !payload.rotation_mode) {
+      toast('Template file and rotation mode are required.', true);
+      return;
+    }
+    if ([
+      payload.min_delay_minutes,
+      payload.max_delay_minutes,
+      payload.max_posts_per_session,
+      payload.cooldown_hours,
+      payload.rest_every_n_posts,
+      payload.rest_duration_minutes,
+    ].some(Number.isNaN)) {
+      toast('Posting rules numeric values must be valid integers.', true);
+      return;
+    }
+    const result = await callAction('update_posting_rules', selectedAccount || '', '', '', {}, {}, {}, payload);
+    if (result && result.ok) closePostingRulesModal();
+  });
   document.getElementById('accountSelect').addEventListener('change', ev => {
     const v = (ev.target.value || '').trim();
-    if (v) selectAccount(v);
+    if (v) {
+      resetGroupPaging();
+      selectAccount(v);
+    }
   });
 
   loadState();
@@ -707,7 +1744,17 @@ def _render_page() -> str:
 """
 
 
-def _execute_account_action(config_path: Path, action: str, account_id: str, group_id: str = "") -> tuple[bool, str]:
+def _execute_account_action(
+    config_path: Path,
+    action: str,
+    account_id: str,
+    group_id: str = "",
+    template_file: str = "",
+    template_data: dict[str, Any] | None = None,
+    browser_rules: dict[str, Any] | None = None,
+    groups_rules: dict[str, Any] | None = None,
+    posting_rules: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
     if action == "add_account":
         return add_account(config_path, account_id)
     if action == "delete_account":
@@ -722,6 +1769,34 @@ def _execute_account_action(config_path: Path, action: str, account_id: str, gro
         return set_group_included(config_path, account_id, group_id, False)
     if action == "include_group":
         return set_group_included(config_path, account_id, group_id, True)
+    if action == "set_template":
+        template_names = {str(item.get("template_file", "")).strip() for item in load_templates(Path("templates"))}
+        normalized_template = template_file.strip()
+        if normalized_template not in template_names:
+            return False, f"Template '{normalized_template}' not found."
+        return set_account_template(config_path, account_id, normalized_template)
+    if action == "save_template":
+      normalized_template = template_file.strip()
+      if not normalized_template:
+        return False, "Template file is required."
+      template_names = {str(item.get("template_file", "")).strip() for item in load_templates(Path("templates"))}
+      if normalized_template not in template_names:
+        return False, f"Template '{normalized_template}' not found."
+      payload = _normalize_template_data(template_data or {})
+      _save_template_file(Path("templates") / normalized_template, payload)
+      return True, f"Template '{normalized_template}' updated."
+    if action == "create_template":
+      payload = _normalize_template_data(template_data or {})
+      template_dir = Path("templates")
+      new_file = _next_template_filename(template_dir)
+      _save_template_file(template_dir / new_file, payload)
+      return True, f"Created template '{new_file}'."
+    if action == "update_browser_rules":
+      return _update_browser_rules(config_path, browser_rules or {})
+    if action == "update_groups_rules":
+      return _update_groups_rules(config_path, groups_rules or {})
+    if action == "update_posting_rules":
+      return _update_posting_rules(config_path, posting_rules or {})
 
     with _account_env(account_id):
         if action == "test_session":
@@ -788,13 +1863,40 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                 action     = str(payload.get("action", "")).strip()
                 account_id = str(payload.get("account_id", "")).strip()
                 group_id   = str(payload.get("group_id", "")).strip()
+                template_file = str(payload.get("template_file", "")).strip()
+                template_data = payload.get("template_data")
+                if not isinstance(template_data, dict):
+                  template_data = {}
+                browser_rules = payload.get("browser_rules")
+                if not isinstance(browser_rules, dict):
+                  browser_rules = {}
+                groups_rules = payload.get("groups_rules")
+                if not isinstance(groups_rules, dict):
+                  groups_rules = {}
+                posting_rules = payload.get("posting_rules")
+                if not isinstance(posting_rules, dict):
+                  posting_rules = {}
 
-                if not account_id:
+                global_actions = {"update_browser_rules", "update_groups_rules", "update_posting_rules"}
+                if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
                     return
 
+                if not account_id:
+                  account_id = get_active_account(state.config_path) or ""
+
                 with state.lock:
-                    ok, result = _execute_account_action(state.config_path, action, account_id, group_id)
+                  ok, result = _execute_account_action(
+                    state.config_path,
+                    action,
+                    account_id,
+                    group_id,
+                    template_file,
+                    template_data,
+                    browser_rules,
+                    groups_rules,
+                    posting_rules,
+                  )
 
                 state_payload = _build_state(state.config_path, account_id or None)
                 if ok:

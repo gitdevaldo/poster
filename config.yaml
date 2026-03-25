@@ -21,10 +21,10 @@ posting:
   max_posts_per_session: 15
   cooldown_hours: 24
   rest_every_n_posts: 10
-  rest_duration_minutes: 30
+  rest_duration_minutes: 10
   dry_run: true
 browser:
-  headless: false
+  headless: true
   locale: id-ID
   timezone: Asia/Jakarta
   humanize: true

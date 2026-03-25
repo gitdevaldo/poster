@@ -148,6 +148,27 @@ def set_active_account(config_path: Path, account_id: str) -> tuple[bool, str]:
     return True, f"Active account set to '{account_id}'."
 
 
+def set_account_template(config_path: Path, account_id: str, template_file: str) -> tuple[bool, str]:
+    normalized_template = template_file.strip()
+    if not normalized_template:
+        return False, "Template file is required."
+
+    config = load_raw_config(config_path)
+    accounts = config.get("accounts", {})
+    if not isinstance(accounts, dict) or account_id not in accounts or not isinstance(accounts[account_id], dict):
+        return False, f"Account '{account_id}' not found."
+
+    account = deepcopy(accounts[account_id])
+    posting_cfg = account.get("posting", {}) if isinstance(account.get("posting"), dict) else {}
+    posting_cfg["template_file"] = normalized_template
+    account["posting"] = posting_cfg
+
+    accounts[account_id] = account
+    config["accounts"] = accounts
+    save_raw_config(config_path, config)
+    return True, f"Template for '{account_id}' set to '{normalized_template}'."
+
+
 def _account_root_dir(account_override: dict[str, Any]) -> Path | None:
     session_cfg = account_override.get("session", {}) if isinstance(account_override, dict) else {}
     session_path = str(session_cfg.get("path", "")).strip()

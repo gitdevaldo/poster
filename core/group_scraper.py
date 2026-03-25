@@ -262,10 +262,15 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
     now = datetime.now(timezone.utc).isoformat()
     merged_by_id: dict[str, dict[str, Any]] = {}
     existing_by_url_key: dict[str, dict[str, Any]] = {}
+    existing_by_name_key: dict[str, dict[str, Any]] = {}
 
     def _url_key(value: str) -> str:
         match = GROUP_LINK_RE.search(str(value or "").strip())
         return match.group(1).strip().lower() if match else ""
+
+    def _name_key(value: str) -> str:
+        cleaned = re.sub(r"\s+", " ", str(value or "").strip().lower())
+        return cleaned
 
     for item in existing:
         group_id = _canonical_group_id(str(item.get("id", "")).strip(), str(item.get("url", "")).strip())
@@ -278,6 +283,9 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
         key = _url_key(str(item.get("url", "")))
         if key:
             existing_by_url_key[key] = item
+        name_key = _name_key(str(item.get("name", "")))
+        if name_key:
+            existing_by_name_key[name_key] = item
 
     for item in scraped:
         group_id = _canonical_group_id(str(item.get("id", "")).strip(), str(item.get("url", "")).strip())
@@ -288,6 +296,9 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
         if group_id not in merged_by_id:
             key = _url_key(str(item.get("url", "")))
             existing_match = existing_by_url_key.get(key)
+            if not isinstance(existing_match, dict):
+                scraped_name_key = _name_key(str(item.get("name", "")))
+                existing_match = existing_by_name_key.get(scraped_name_key)
             if isinstance(existing_match, dict):
                 old_id = str(existing_match.get("id", "")).strip()
                 if old_id and old_id in merged_by_id:
