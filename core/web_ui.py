@@ -54,9 +54,119 @@ class _WebState:
     def __init__(self, config_path: Path) -> None:
         self.config_path = config_path
         self.lock = threading.Lock()
+        self.runner_thread: threading.Thread | None = None
+        self.runner_account: str = ""
+        self.runner_mode: str = ""
+        self.runner_status: str = "idle"
+        self.runner_message: str = ""
+        self.pause_event = threading.Event()
+        self.stop_event = threading.Event()
+
+    def _sync_runner_locked(self) -> None:
+        if self.runner_thread is not None and not self.runner_thread.is_alive():
+            self.runner_thread = None
+            self.runner_account = ""
+            self.runner_mode = ""
+            self.runner_status = "idle"
+            self.pause_event.clear()
+            self.stop_event.clear()
+
+    def snapshot_runner(self, selected_account: str | None = None) -> dict[str, Any]:
+        self._sync_runner_locked()
+        is_active = self.runner_thread is not None and self.runner_thread.is_alive()
+        target = (selected_account or "").strip()
+        is_selected = bool(target and target == self.runner_account)
+        return {
+            "is_active": is_active,
+            "status": self.runner_status,
+            "account_id": self.runner_account,
+            "mode": self.runner_mode,
+            "is_selected_account": is_selected,
+            "message": self.runner_message,
+        }
+
+    def start_run(self, account_id: str, *, live: bool) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.runner_thread is not None:
+            return False, f"Another run is in progress for '{self.runner_account}'."
+
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+
+        mode_label = "live" if live else "dry"
+        self.pause_event.clear()
+        self.stop_event.clear()
+        self.runner_account = account
+        self.runner_mode = mode_label
+        self.runner_status = "running"
+        self.runner_message = ""
+
+        def _worker() -> None:
+            error_message = ""
+            try:
+                with _account_env(account):
+                    run_scheduler(
+                        self.config_path,
+                        run_once=True,
+                        force_dry_run=not live,
+                        pause_event=self.pause_event,
+                        stop_event=self.stop_event,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive
+                error_message = f"{type(exc).__name__}: {exc}"
+            finally:
+                with self.lock:
+                    self._sync_runner_locked()
+                    if error_message:
+                        self.runner_message = error_message
+
+        thread = threading.Thread(target=_worker, name=f"web-ui-runner-{account}", daemon=True)
+        self.runner_thread = thread
+        thread.start()
+        return True, f"Started {mode_label} run for '{account}'."
+
+    def pause_run(self, account_id: str) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.runner_thread is None:
+            return False, "No active run to pause."
+        if self.runner_account != account_id:
+            return False, f"Run is active for '{self.runner_account}'."
+        if self.runner_status == "paused":
+            return True, "Run is already paused."
+        self.pause_event.set()
+        self.runner_status = "paused"
+        return True, "Run paused."
+
+    def resume_run(self, account_id: str) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.runner_thread is None:
+            return False, "No active run to resume."
+        if self.runner_account != account_id:
+            return False, f"Run is active for '{self.runner_account}'."
+        if self.runner_status != "paused":
+            return False, "Run is not paused."
+        self.pause_event.clear()
+        self.runner_status = "running"
+        return True, "Run resumed."
+
+    def stop_run(self, account_id: str) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.runner_thread is None:
+            return False, "No active run to stop."
+        if self.runner_account != account_id:
+            return False, f"Run is active for '{self.runner_account}'."
+        self.stop_event.set()
+        self.pause_event.clear()
+        self.runner_status = "stopping"
+        return True, "Stop requested. Waiting for current step to finish."
 
 
-def _build_state(config_path: Path, selected_account: str | None = None) -> dict[str, Any]:
+def _build_state(
+  config_path: Path,
+  selected_account: str | None = None,
+  runner_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     config = load_raw_config(config_path)
     accounts = list_accounts(config_path)
     active = get_active_account(config_path) or ""
@@ -125,6 +235,14 @@ def _build_state(config_path: Path, selected_account: str | None = None) -> dict
       "global_posting": dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {},
         "browser": dict(config.get("browser", {})) if isinstance(config.get("browser"), dict) else {},
         "templates": templates,
+      "run_control": runner_state or {
+        "is_active": False,
+        "status": "idle",
+        "account_id": "",
+        "mode": "",
+        "is_selected_account": False,
+        "message": "",
+      },
     }
 
 
@@ -1637,6 +1755,39 @@ def _render_page() -> str:
     }).join('');
   }
 
+  function renderQuickActions(data) {
+    const runner = data.run_control || {};
+    const isActive = !!runner.is_active;
+    const isSelectedRunner = !!runner.is_selected_account;
+    const status = String(runner.status || 'idle');
+    const holder = document.getElementById('selectedActions');
+
+    const buttons = [
+      '<button type="button" data-action="test_session">🔍 Test Session</button>',
+      '<button type="button" data-action="setup_session">🔐 Setup Session</button>',
+      '<button type="button" data-action="scrape_groups" class="btn-yellow">🕷️ Scrape Groups</button>',
+    ];
+
+    if (!isActive || !isSelectedRunner) {
+      buttons.push('<button type="button" data-action="run_once_dry">🧪 Run Dry</button>');
+      buttons.push('<button type="button" data-action="run_once_live" class="btn-green">🚀 Run Live</button>');
+    } else if (status === 'paused') {
+      buttons.push('<button type="button" data-action="resume_run" class="btn-green">▶ Resume</button>');
+      buttons.push('<button type="button" data-action="stop_run" class="btn-red">■ Stop</button>');
+    } else if (status === 'stopping') {
+      buttons.push('<button type="button" disabled class="btn-yellow">⏳ Stopping…</button>');
+    } else {
+      buttons.push('<button type="button" data-action="pause_run" class="btn-yellow">⏸ Pause</button>');
+      buttons.push('<button type="button" data-action="stop_run" class="btn-red">■ Stop</button>');
+    }
+
+    if (isActive && !isSelectedRunner && runner.account_id) {
+      buttons.push(`<button type="button" disabled>Running on ${esc(runner.account_id)}</button>`);
+    }
+
+    holder.innerHTML = buttons.join('');
+  }
+
   async function loadState() {
     const q = selectedAccount ? `?account=${encodeURIComponent(selectedAccount)}` : '';
     try {
@@ -1653,6 +1804,7 @@ def _render_page() -> str:
       renderPostingRulesSummary(globalPostingSnapshot);
       document.getElementById('selectedTitle').textContent =
         selectedAccount ? `Actions — ${selectedAccount}` : 'Select an account';
+      renderQuickActions(data);
       renderAccounts(data);
       renderGroups({ groups: groupsSnapshot });
       setUpdated();
@@ -1980,25 +2132,27 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
             self.wfile.write(body)
 
         def do_GET(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path)
-            qs = parse_qs(parsed.query)
-            if parsed.path == "/api/state":
-                selected_account = (qs.get("account") or [""])[0].strip() or None
-                payload = _build_state(state.config_path, selected_account)
-                self._send_json({"ok": True, "data": payload, **payload})
-                return
-            if parsed.path == "/api/logs":
-                limit_raw = (qs.get("limit") or ["200"])[0].strip()
-                try:
-                    limit = int(limit_raw)
-                except Exception:
-                    limit = 200
-                self._send_json({"ok": True, "logs": _read_live_logs(limit)})
-                return
-            if parsed.path == "/":
-                self._send_html(_render_page())
-                return
-            self.send_error(404)
+          parsed = urlparse(self.path)
+          qs = parse_qs(parsed.query)
+          if parsed.path == "/api/state":
+            selected_account = (qs.get("account") or [""])[0].strip() or None
+            with state.lock:
+              runner_state = state.snapshot_runner(selected_account)
+            payload = _build_state(state.config_path, selected_account, runner_state)
+            self._send_json({"ok": True, "data": payload, **payload})
+            return
+          if parsed.path == "/api/logs":
+            limit_raw = (qs.get("limit") or ["200"])[0].strip()
+            try:
+              limit = int(limit_raw)
+            except Exception:
+              limit = 200
+            self._send_json({"ok": True, "logs": _read_live_logs(limit)})
+            return
+          if parsed.path == "/":
+            self._send_html(_render_page())
+            return
+          self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802
             if self.path != "/api/action":
@@ -2034,19 +2188,32 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   account_id = get_active_account(state.config_path) or ""
 
                 with state.lock:
-                  ok, result = _execute_account_action(
-                    state.config_path,
-                    action,
-                    account_id,
-                    group_id,
-                    template_file,
-                    template_data,
-                    browser_rules,
-                    groups_rules,
-                    posting_rules,
-                  )
+                  if action == "run_once_live":
+                    ok, result = state.start_run(account_id, live=True)
+                  elif action == "run_once_dry":
+                    ok, result = state.start_run(account_id, live=False)
+                  elif action == "pause_run":
+                    ok, result = state.pause_run(account_id)
+                  elif action == "resume_run":
+                    ok, result = state.resume_run(account_id)
+                  elif action == "stop_run":
+                    ok, result = state.stop_run(account_id)
+                  else:
+                    ok, result = _execute_account_action(
+                      state.config_path,
+                      action,
+                      account_id,
+                      group_id,
+                      template_file,
+                      template_data,
+                      browser_rules,
+                      groups_rules,
+                      posting_rules,
+                    )
 
-                state_payload = _build_state(state.config_path, account_id or None)
+                  runner_state = state.snapshot_runner(account_id or None)
+
+                state_payload = _build_state(state.config_path, account_id or None, runner_state)
                 if ok:
                     self._send_json({"ok": True, "message": result, "state": state_payload})
                 else:

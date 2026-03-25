@@ -75,8 +75,7 @@ def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _home_url(config: dict[str, Any]) -> str:
-    facebook_cfg = config.get("facebook", {})
-    return str(facebook_cfg.get("home_url", "https://www.facebook.com/"))
+    return "https://www.facebook.com/"
 
 
 def _load_json(path: Path) -> dict[str, Any]:

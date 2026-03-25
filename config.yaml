@@ -18,16 +18,16 @@ posting:
   rotation_mode: single
   min_delay_minutes: 3
   max_delay_minutes: 5
-  max_posts_per_session: 15
+  max_posts_per_session: 50
   cooldown_hours: 24
   rest_every_n_posts: 10
   rest_duration_minutes: 10
   dry_run: true
 browser:
-  headless: true
+  headless: false
   locale: id-ID
   timezone: Asia/Jakarta
-  humanize: true
+  humanize: false
   fullscreen: true
   screen_max_width: 1536
   screen_max_height: 864
@@ -41,27 +41,6 @@ paths:
   queue_state: data/queue_state.json
   posted_log: data/logs/posted_log.json
   screenshots: logs/screenshots
-facebook:
-  home_url: https://www.facebook.com/
-  group_feed_url: https://www.facebook.com/groups/feed/
-  joined_groups_url: https://www.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added
-  selectors:
-    composer_buttons:
-    - div[role='button'][aria-label*='Write something']
-    - div[role='button'][aria-label*='Tulis sesuatu']
-    - div[role='button']:has-text('Write something')
-    - div[role='button']:has-text('Tulis sesuatu')
-    - div[data-testid='group-composer-enter-composer']
-    textboxes:
-    - div[role='textbox']
-    - div[contenteditable='true'][role='textbox']
-    - div[aria-label*='Write']
-    - div[aria-label*='Tulis']
-    post_buttons:
-    - div[role='button']:has-text('Post')
-    - div[role='button']:has-text('Kirim')
-    - div[data-testid='react-composer-post-button']
-    file_input: input[type='file']
 error_handling:
   retry_max_attempts: 2
   retry_backoff_seconds: 3

@@ -263,6 +263,8 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
     merged_by_id: dict[str, dict[str, Any]] = {}
     existing_by_url_key: dict[str, dict[str, Any]] = {}
     existing_by_name_key: dict[str, dict[str, Any]] = {}
+    existing_active_by_id: dict[str, bool] = {}
+    existing_active_by_url_key: dict[str, bool] = {}
 
     def _url_key(value: str) -> str:
         match = GROUP_LINK_RE.search(str(value or "").strip())
@@ -283,9 +285,19 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
         key = _url_key(str(item.get("url", "")))
         if key:
             existing_by_url_key[key] = item
+            existing_active_by_url_key[key] = bool(item.get("active", True))
         name_key = _name_key(str(item.get("name", "")))
         if name_key:
             existing_by_name_key[name_key] = item
+        existing_active_by_id[group_id] = bool(item.get("active", True))
+
+    def _preserved_active(group_id: str, group_url: str) -> bool | None:
+        if group_id in existing_active_by_id:
+            return existing_active_by_id[group_id]
+        key = _url_key(group_url)
+        if key and key in existing_active_by_url_key:
+            return existing_active_by_url_key[key]
+        return None
 
     for item in scraped:
         group_id = _canonical_group_id(str(item.get("id", "")).strip(), str(item.get("url", "")).strip())
@@ -310,15 +322,18 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
             merged = merged_by_id[group_id]
             merged["name"] = item.get("name") or merged.get("name")
             merged["url"] = item.get("url") or merged.get("url")
-            merged.setdefault("active", True)
+            if "active" not in merged:
+                prior_active = _preserved_active(group_id, str(merged.get("url", "")))
+                merged["active"] = True if prior_active is None else prior_active
             merged["updated_at"] = now
         else:
+            prior_active = _preserved_active(group_id, str(item.get("url", "")))
             merged_by_id[group_id] = {
                 "id": group_id,
                 "name": item.get("name") or f"Group {group_id}",
                 "url": item.get("url") or f"https://www.facebook.com/groups/{group_id}",
                 "last_posted": None,
-                "active": True,
+                "active": True if prior_active is None else prior_active,
                 "updated_at": now,
             }
 
@@ -374,20 +389,14 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
             "Camoufox is not installed. Run: pip install -U -r requirements.txt and camoufox fetch"
         ) from exc
 
-    facebook_cfg = config.get("facebook", {})
-    group_list_url = str(
-        facebook_cfg.get(
-            "joined_groups_url",
-            "https://www.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added",
-        )
-    )
+    group_list_url = "https://www.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added"
     scrape_cfg = config.get("groups", {}).get("scrape", {})
     max_scrolls = int(scrape_cfg.get("max_scrolls", 30))
     idle_rounds_to_stop = int(scrape_cfg.get("idle_rounds_to_stop", 4))
     scroll_wait_ms = int(scrape_cfg.get("scroll_wait_ms", 1400))
     min_scroll_rounds_before_stop = int(scrape_cfg.get("min_scroll_rounds_before_stop", 8))
     min_expected_groups = int(scrape_cfg.get("min_expected_groups", 10))
-    group_feed_url = str(facebook_cfg.get("group_feed_url", "https://www.facebook.com/groups/feed/"))
+    group_feed_url = "https://www.facebook.com/groups/feed/"
 
     kwargs = camoufox_kwargs(config)
 

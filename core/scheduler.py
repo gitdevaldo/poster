@@ -6,6 +6,7 @@ import random
 import re
 import time
 from pathlib import Path
+import threading
 from typing import Any
 
 from core.config_loader import load_config
@@ -164,7 +165,13 @@ def _human_type(page: Any, text: str) -> None:
 def _click_first_available(page: Any, selectors: list[str], timeout: int = 3000) -> bool:
     for selector in selectors:
         try:
-            page.locator(selector).first.click(timeout=timeout)
+            loc = page.locator(selector)
+            if loc.count() < 1:
+                continue
+            target = loc.first
+            if not target.is_visible(timeout=500):
+                continue
+            target.click(timeout=timeout)
             return True
         except Exception:
             continue
@@ -181,36 +188,254 @@ def _is_any_selector_visible(page: Any, selectors: list[str], timeout: int = 120
     return False
 
 
-def _open_group_composer(page: Any, composer_selectors: list[str], textbox_selectors: list[str]) -> bool:
-    if _is_any_selector_visible(page, textbox_selectors, timeout=1200):
-        return True
+def _lock_background_scroll(page: Any) -> None:
+    try:
+        page.evaluate(
+            """
+            () => {
+              const y = window.scrollY || document.documentElement.scrollTop || 0;
+                            if (!window.__fbpost_scroll_lock_state) {
+                                window.__fbpost_scroll_lock_state = {
+                                    y,
+                                    scrollTo: window.scrollTo,
+                                    scrollBy: window.scrollBy,
+                                };
+                            }
 
-    attempts = 4
-    for _ in range(attempts):
-        if _click_first_available(page, selectors=composer_selectors, timeout=5000):
-            page.wait_for_timeout(1200)
-            if _is_any_selector_visible(page, textbox_selectors, timeout=4000):
-                return True
+                            const onWheel = (e) => e.preventDefault();
+                            const onTouch = (e) => e.preventDefault();
+                            const onKey = (e) => {
+                                const blocked = ['PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Home', 'End', ' ', 'Spacebar'];
+                                if (blocked.includes(e.key)) e.preventDefault();
+                            };
+
+                            window.__fbpost_scroll_lock_state.onWheel = onWheel;
+                            window.__fbpost_scroll_lock_state.onTouch = onTouch;
+                            window.__fbpost_scroll_lock_state.onKey = onKey;
+
+                            window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+                            window.addEventListener('touchmove', onTouch, { passive: false, capture: true });
+                            window.addEventListener('keydown', onKey, { passive: false, capture: true });
+
+                            window.scrollTo = () => {};
+                            window.scrollBy = () => {};
+
+              const html = document.documentElement;
+              const body = document.body;
+              if (html) html.style.overflow = 'hidden';
+                            if (body) {
+                                body.style.overflow = 'hidden';
+                                body.style.position = 'fixed';
+                                body.style.top = `-${y}px`;
+                                body.style.left = '0';
+                                body.style.right = '0';
+                                body.style.width = '100%';
+                            }
+            }
+            """
+        )
+    except Exception:
+        return
+
+
+def _unlock_background_scroll(page: Any) -> None:
+    try:
+        page.evaluate(
+            """
+            () => {
+                            const state = window.__fbpost_scroll_lock_state || {};
+                            if (state.onWheel) window.removeEventListener('wheel', state.onWheel, { capture: true });
+                            if (state.onTouch) window.removeEventListener('touchmove', state.onTouch, { capture: true });
+                            if (state.onKey) window.removeEventListener('keydown', state.onKey, { capture: true });
+                            if (typeof state.scrollTo === 'function') window.scrollTo = state.scrollTo;
+                            if (typeof state.scrollBy === 'function') window.scrollBy = state.scrollBy;
+
+              const html = document.documentElement;
+              const body = document.body;
+              if (html) html.style.overflow = '';
+                            if (body) {
+                                body.style.overflow = '';
+                                body.style.position = '';
+                                body.style.top = '';
+                                body.style.left = '';
+                                body.style.right = '';
+                                body.style.width = '';
+                            }
+                            const y = Number(state.y || 0);
+              window.scrollTo(0, Number.isFinite(y) ? y : 0);
+                            window.__fbpost_scroll_lock_state = undefined;
+            }
+            """
+        )
+    except Exception:
+        return
+
+
+def _get_popup_root(page: Any, *, timeout: int = 3000) -> Any | None:
+    """Locate the composer popup dialog root. Returns a Locator or None.
+
+    Facebook pages often have multiple div[role='dialog'] elements in the DOM
+    (cookie banners, notification popups, etc.).  We must NOT rely on
+    ``locator.first`` because the first dialog in DOM order is frequently a
+    *hidden* one — calling ``wait_for`` on it would time-out even though the
+    composer popup is perfectly visible further down.
+
+    Instead we poll *all* dialogs until we find a visible one that looks like
+    the composer.
+    """
+    dialog_selector = "div[role='dialog']"
+    deadline = time.monotonic() + (timeout / 1000.0)
+
+    while time.monotonic() < deadline:
+        try:
+            loc = page.locator(dialog_selector)
+            count = loc.count()
+            for i in range(count):
+                dialog = loc.nth(i)
+                try:
+                    if not dialog.is_visible(timeout=200):
+                        continue
+                except Exception:
+                    continue
+
+                # Best check: dialog contains a contenteditable textbox
+                try:
+                    tb = dialog.locator(
+                        "div[contenteditable='true'][role='textbox'][data-lexical-editor='true']"
+                    )
+                    if tb.count() > 0:
+                        return dialog
+                except Exception:
+                    pass
+
+                # Fallback: dialog contains heading/text "Create post" / "Buat postingan"
+                try:
+                    text_content = dialog.inner_text(timeout=300).lower()
+                    if "create post" in text_content or "buat postingan" in text_content:
+                        return dialog
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        page.wait_for_timeout(200)
+
+    return None
+
+
+def _click_composer_trigger_by_text(page: Any) -> bool:
+    """Fallback: find composer trigger by its text content ('Write something...' / 'Tulis sesuatu...')."""
+    trigger_texts = ["Write something", "Tulis sesuatu"]
+    for txt in trigger_texts:
+        try:
+            # The trigger is a span inside a div[role='button']
+            span = page.locator(f"div[role='button'] span:has-text('{txt}')")
+            if span.count() > 0:
+                first_span = span.first
+                if first_span.is_visible(timeout=1500):
+                    # Click the parent button, not the span itself
+                    btn = first_span.locator("xpath=ancestor::div[@role='button'][1]")
+                    if btn.count() > 0:
+                        btn.first.click(timeout=3000)
+                        return True
+                    # Fallback: click the span
+                    first_span.click(timeout=3000)
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def _open_group_composer(
+    page: Any,
+    composer_selectors: list[str],
+) -> Any | None:
+    """Click the composer trigger and return the popup dialog root locator, or None."""
+    log_event("state_enter: pre_popup")
+
+    # Check if popup is already open
+    popup = _get_popup_root(page, timeout=1200)
+    if popup is not None:
+        log_event("state_exit: pre_popup_success (popup already open)")
+        return popup
+
+    attempts = 3
+    for attempt_num in range(1, attempts + 1):
+        # Try CSS selectors first
+        clicked = _click_first_available(page, selectors=composer_selectors, timeout=5000)
+        if not clicked:
+            # Fallback: try text-based trigger
+            clicked = _click_composer_trigger_by_text(page)
+
+        if clicked:
+            page.wait_for_timeout(1500)
+            popup = _get_popup_root(page, timeout=5000)
+            if popup is not None:
+                log_event("state_exit: pre_popup_success", context={"attempt": attempt_num})
+                return popup
         else:
             page.wait_for_timeout(1000)
 
-    return _is_any_selector_visible(page, textbox_selectors, timeout=2500)
+    log_event("state_exit: pre_popup_failed (could not open composer)")
+    return None
 
 
-def _fill_post_text(page: Any, text: str, selectors: list[str]) -> bool:
-
-    for selector in selectors:
-        try:
-            box = page.locator(selector).first
-            box.click(timeout=5000)
+def _fill_post_text(page: Any, popup_root: Any, text: str) -> bool:
+    """Fill the post textbox inside the popup dialog."""
+    textbox_selector = "div[contenteditable='true'][role='textbox'][data-lexical-editor='true']"
+    try:
+        boxes = popup_root.locator(textbox_selector)
+        for i in range(boxes.count()):
+            box = boxes.nth(i)
             try:
-                box.fill(text, timeout=5000)
+                if not box.is_visible(timeout=500):
+                    continue
+                aria_label = (box.get_attribute("aria-label") or "").strip().lower()
+                aria_placeholder = (box.get_attribute("aria-placeholder") or "").strip().lower()
+                # Skip comment inputs explicitly.
+                if "comment" in aria_label or "comment" in aria_placeholder:
+                    continue
+                box.click(timeout=5000)
+                try:
+                    box.fill(text, timeout=5000)
+                except Exception:
+                    page.keyboard.press("Control+a")
+                    page.keyboard.insert_text(text)
+                log_event("popup_textbox_found")
+                return True
             except Exception:
-                page.keyboard.press("Control+a")
-                page.keyboard.insert_text(text)
-            return True
-        except Exception:
-            continue
+                continue
+    except Exception:
+        pass
+    return False
+
+
+def _click_enabled_post_button(page: Any, popup_root: Any, timeout_ms: int = 7000) -> bool:
+    """Wait for the Post button inside the popup to become enabled, then click it."""
+    post_button_selectors = [
+        "div[role='button'][aria-label='Post']",
+        "div[role='button'][aria-label='Kirim']",
+        "div[data-testid='react-composer-post-button']",
+    ]
+    deadline = time.monotonic() + (max(1000, timeout_ms) / 1000.0)
+    while time.monotonic() < deadline:
+        for selector in post_button_selectors:
+            try:
+                loc = popup_root.locator(selector)
+                if loc.count() < 1:
+                    continue
+                button = loc.first
+                if not button.is_visible(timeout=250):
+                    continue
+                aria_disabled = str(button.get_attribute("aria-disabled") or "").strip().lower()
+                if aria_disabled == "true":
+                    continue
+                log_event("popup_post_button_enabled")
+                button.click(timeout=1200)
+                log_event("popup_post_clicked")
+                return True
+            except Exception:
+                continue
+        page.wait_for_timeout(250)
     return False
 
 
@@ -237,7 +462,8 @@ def _collect_template_images(template: dict[str, Any]) -> list[str]:
     return unique_images
 
 
-def _attach_image_if_present(page: Any, image_paths: list[str], file_input_selector: str) -> bool:
+def _attach_image_if_present(page: Any, popup_root: Any, image_paths: list[str]) -> bool:
+    """Attach images via the file input inside the popup dialog."""
     if not image_paths:
         return True
 
@@ -248,24 +474,31 @@ def _attach_image_if_present(page: Any, image_paths: list[str], file_input_selec
             return False
         resolved_paths.append(str(path.resolve()))
 
+    file_input_selector = "input[type='file']"
+    photo_button_selectors = [
+        "div[role='button'][aria-label='Photo/video']",
+        "div[role='button'][aria-label='Foto/video']",
+    ]
+
     for _ in range(2):
         try:
-            page.locator(file_input_selector).first.set_input_files(resolved_paths, timeout=7000)
-            page.wait_for_timeout(2500)
-            return True
+            file_input = popup_root.locator(file_input_selector)
+            if file_input.count() > 0:
+                file_input.first.set_input_files(resolved_paths, timeout=7000)
+                page.wait_for_timeout(2500)
+                return True
         except Exception:
-            # Some group composers require opening the media picker before the file input appears.
-            _click_first_available(
-                page,
-                selectors=[
-                    "div[role='button']:has-text('Photo/video')",
-                    "div[role='button']:has-text('Foto/video')",
-                    "span:has-text('Photo/video')",
-                    "span:has-text('Foto/video')",
-                ],
-                timeout=2500,
-            )
-            page.wait_for_timeout(1200)
+            pass
+        # Some group composers require opening the media picker before the file input appears.
+        for sel in photo_button_selectors:
+            try:
+                btn = popup_root.locator(sel)
+                if btn.count() > 0 and btn.first.is_visible(timeout=500):
+                    btn.first.click(timeout=2500)
+                    page.wait_for_timeout(1200)
+                    break
+            except Exception:
+                continue
     return False
 
 
@@ -277,9 +510,6 @@ def _post_to_group(
     dry_run: bool,
     home_url: str,
     composer_selectors: list[str],
-    textbox_selectors: list[str],
-    post_button_selectors: list[str],
-    file_input_selector: str,
     captcha_keywords: list[str],
     rate_limit_keywords: list[str],
 ) -> tuple[bool, str]:
@@ -306,42 +536,101 @@ def _post_to_group(
     if _detect_keyword_block(page, rate_limit_keywords):
         return False, "RATE_LIMIT_DETECTED"
 
-    composer_open = _open_group_composer(page, composer_selectors, textbox_selectors)
-    if not composer_open:
+    # --- State A: click composer trigger ---
+    popup_root = _open_group_composer(page, composer_selectors)
+    if popup_root is None:
+        log_event("popup_flow_failed", context={"group": group_name, "reason": "Could not open group composer"})
         return False, "Could not open group composer"
 
-    log_event("Posting step: composer opened.", context={"group": group_name})
-    page.wait_for_timeout(random.randint(500, 1200))
+    # --- State B: all actions scoped to popup_root ---
+    log_event("state_enter: popup", context={"group": group_name})
+    _lock_background_scroll(page)
+    try:
+        page.wait_for_timeout(random.randint(500, 1200))
 
-    if text and not _fill_post_text(page, text, textbox_selectors):
-        return False, "Could not fill post textbox"
-    if text:
-        log_event("Posting step: text inserted.", context={"group": group_name, "text_length": len(text)})
+        if text and not _fill_post_text(page, popup_root, text):
+            log_event("popup_flow_failed", context={"group": group_name, "reason": "Could not fill post textbox"})
+            return False, "Could not fill post textbox"
+        if text:
+            log_event("Posting step: text inserted.", context={"group": group_name, "text_length": len(text)})
 
-    if image_paths and not _attach_image_if_present(page, image_paths, file_input_selector):
-        return False, "Image attachment failed"
-    if image_paths:
-        log_event("Posting step: images attached.", context={"group": group_name, "image_count": len(image_paths)})
+        if image_paths:
+            image_attached = _attach_image_if_present(page, popup_root, image_paths)
+            if image_attached:
+                log_event("Posting step: images attached.", context={"group": group_name, "image_count": len(image_paths)})
+            else:
+                # Continue with text-only post when image upload UI is unavailable in this group.
+                log_event(
+                    "Posting step: image attachment failed, continuing without images.",
+                    level="WARNING",
+                    context={"group": group_name, "image_count": len(image_paths)},
+                )
 
-    posted = _click_first_available(page, selectors=post_button_selectors, timeout=4000)
-    if not posted:
-        return False, "Post button not found"
+        posted = _click_enabled_post_button(page, popup_root, timeout_ms=7000)
+        if not posted:
+            log_event("popup_flow_failed", context={"group": group_name, "reason": "Post button not found or not enabled"})
+            return False, "Post button not found"
 
-    page.wait_for_timeout(5000)
-    page.goto(home_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(random.randint(600, 1200))
-    return True, "Posted"
+        page.wait_for_timeout(5000)
+        page.goto(home_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(random.randint(600, 1200))
+        return True, "Posted"
+    finally:
+        _unlock_background_scroll(page)
 
 
-def _sleep_between_posts(min_delay: int, max_delay: int, *, dry_run: bool) -> None:
+def _control_checkpoint(
+    pause_event: threading.Event | None,
+    stop_event: threading.Event | None,
+) -> bool:
+    if stop_event is not None and stop_event.is_set():
+        return False
+    if pause_event is not None:
+        while pause_event.is_set():
+            if stop_event is not None and stop_event.is_set():
+                return False
+            time.sleep(0.2)
+    return True
+
+
+def _sleep_controlled(
+    seconds: float,
+    *,
+    pause_event: threading.Event | None,
+    stop_event: threading.Event | None,
+) -> bool:
+    remaining = max(0.0, float(seconds))
+    while remaining > 0:
+        if not _control_checkpoint(pause_event, stop_event):
+            return False
+        chunk = min(1.0, remaining)
+        time.sleep(chunk)
+        remaining -= chunk
+    return _control_checkpoint(pause_event, stop_event)
+
+
+def _sleep_between_posts(
+    min_delay: int,
+    max_delay: int,
+    *,
+    dry_run: bool,
+    pause_event: threading.Event | None,
+    stop_event: threading.Event | None,
+) -> bool:
     if dry_run:
-        time.sleep(0.2)
-        return
+        return _sleep_controlled(0.2, pause_event=pause_event, stop_event=stop_event)
     delay_seconds = random.randint(min_delay * 60, max_delay * 60)
-    time.sleep(delay_seconds)
+    return _sleep_controlled(delay_seconds, pause_event=pause_event, stop_event=stop_event)
 
 
-def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | None = None) -> None:
+def run_scheduler(
+    config_path: Path,
+    run_once: bool,
+    *,
+    force_dry_run: bool | None = None,
+    pause_event: threading.Event | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     config = _load_config(config_path)
     groups_path = Path(config["groups"]["source"])
     blacklist_path = Path(config["groups"]["blacklist"])
@@ -360,33 +649,19 @@ def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | No
     rotation_mode = str(posting_cfg.get("rotation_mode", "single"))
     selected_template_file = str(posting_cfg.get("template_file", "")).strip()
 
-    facebook_cfg = config.get("facebook", {})
-    selectors_cfg = facebook_cfg.get("selectors", {})
-    home_url = str(facebook_cfg.get("home_url", "https://www.facebook.com/"))
-    composer_selectors = [str(s) for s in selectors_cfg.get("composer_buttons", [])]
-    textbox_selectors = [str(s) for s in selectors_cfg.get("textboxes", [])]
-    post_button_selectors = [str(s) for s in selectors_cfg.get("post_buttons", [])]
-    file_input_selector = str(selectors_cfg.get("file_input", "input[type='file']"))
+    home_url = "https://www.facebook.com/"
+    composer_selectors: list[str] = []
 
     default_composer_selectors = [
+        # Primary: the composer card trigger area on Facebook group pages
+        "div.xod5an3 div[role='button'][tabindex='0']",
+        # Fallbacks for different FB UI variants
+        "div[data-testid='group-composer-enter-composer']",
         "div[role='button'][aria-label*='Create post' i]",
-        "div[role='button']:has-text('Create post')",
-        "div[role='button']:has-text(\"What's on your mind\")",
-        "div[role='button']:has-text('Apa yang Anda pikirkan')",
-    ]
-    default_textbox_selectors = [
-        "div[role='dialog'] div[role='textbox']",
-        "div[contenteditable='true'][data-lexical-editor='true']",
-    ]
-    default_post_button_selectors = [
-        "div[role='button'][aria-label='Post']",
-        "div[role='button'][aria-label='Post to group']",
-        "div[role='button']:has-text('Post to group')",
+        "div[role='button'][aria-label*='Buat postingan' i]",
     ]
 
     composer_selectors = list(dict.fromkeys(composer_selectors + default_composer_selectors))
-    textbox_selectors = list(dict.fromkeys(textbox_selectors + default_textbox_selectors))
-    post_button_selectors = list(dict.fromkeys(post_button_selectors + default_post_button_selectors))
 
     error_cfg = config.get("error_handling", {})
     retry_max_attempts = max(1, int(error_cfg.get("retry_max_attempts", 2)))
@@ -474,7 +749,7 @@ def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | No
             for index, group in enumerate(eligible_groups):
                 if posted_count >= max_posts:
                     break
-                if stop_requested:
+                if stop_requested or not _control_checkpoint(pause_event, stop_event):
                     break
 
                 template = planned_templates[index]
@@ -488,9 +763,6 @@ def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | No
                         dry_run=dry_run,
                         home_url=home_url,
                         composer_selectors=composer_selectors,
-                        textbox_selectors=textbox_selectors,
-                        post_button_selectors=post_button_selectors,
-                        file_input_selector=file_input_selector,
                         captcha_keywords=captcha_keywords,
                         rate_limit_keywords=rate_limit_keywords,
                     )
@@ -499,10 +771,13 @@ def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | No
                     if detail in {"CAPTCHA_DETECTED", "RATE_LIMIT_DETECTED", "GROUP_404"}:
                         break
                     if attempt < retry_max_attempts:
-                        if dry_run:
-                            time.sleep(0.2)
-                        else:
-                            time.sleep(retry_backoff_seconds * attempt)
+                        backoff_seconds = 0.2 if dry_run else retry_backoff_seconds * attempt
+                        if not _sleep_controlled(backoff_seconds, pause_event=pause_event, stop_event=stop_event):
+                            stop_requested = True
+                            break
+
+                if stop_requested or not _control_checkpoint(pause_event, stop_event):
+                    break
 
                 now_iso = datetime.now(timezone.utc).isoformat()
                 template_file = str(template.get("template_file", "unknown"))
@@ -580,14 +855,24 @@ def run_scheduler(config_path: Path, run_once: bool, *, force_dry_run: bool | No
                     )
 
                 if posted_count > 0 and rest_every > 0 and posted_count % rest_every == 0:
-                    if dry_run:
-                        time.sleep(0.2)
-                    else:
+                    rest_seconds = 0.2
+                    if not dry_run:
                         low = max(1, rest_minutes - 10)
                         high = rest_minutes + 10
-                        time.sleep(random.randint(low, high) * 60)
+                        rest_seconds = random.randint(low, high) * 60
+                    if not _sleep_controlled(rest_seconds, pause_event=pause_event, stop_event=stop_event):
+                        stop_requested = True
+                        break
 
-                _sleep_between_posts(min_delay, max_delay, dry_run=dry_run)
+                if not _sleep_between_posts(
+                    min_delay,
+                    max_delay,
+                    dry_run=dry_run,
+                    pause_event=pause_event,
+                    stop_event=stop_event,
+                ):
+                    stop_requested = True
+                    break
 
             save_session_from_page(page, session_path)
     except Exception as exc:

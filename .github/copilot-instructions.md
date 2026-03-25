@@ -203,6 +203,8 @@ If the repository is not initialized or no remote exists, document that limitati
 - Before any non-trivial code change, state: exact change, exact reason tied to user request, and impact scope.
 - Keep changes minimal and PRD-aligned; avoid assumption-based improvements.
 - If a possible change is optional, ask for approval before implementing it.
+- Browser/runtime behavior must remain config-driven. Do not hardcode scheduler overrides for browser options that already exist in `config.yaml`.
+- For group posting flow, do not introduce background scroll/motion activity after composer popup opens unless explicitly requested by user.
 
 ### 1. No Lazy Fixes
 - Always find and fix root causes. Never apply temporary workarounds or band-aids.
