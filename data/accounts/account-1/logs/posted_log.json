@@ -18,5 +18,15 @@
     "status": "posted",
     "dry_run": false,
     "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-03-25T08:13:25.289059+00:00",
+    "group_id": "bloggerindonesiaaa",
+    "group_name": "BLOGGER INDONESIA",
+    "group_url": "https://www.facebook.com/groups/bloggerindonesiaaa/",
+    "template": "post_1.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
   }
 ]

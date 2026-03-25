@@ -717,9 +717,6 @@ def run_scheduler(
     configured_dry_run = bool(posting_cfg.get("dry_run", True))
     dry_run = configured_dry_run if force_dry_run is None else force_dry_run
 
-    if run_once:
-        max_posts = min(max_posts, 1)
-
     groups = [g for g in _load_groups(groups_path) if bool(g.get("active", True))]
     blacklist = _load_blacklist(blacklist_path)
     already_posted = _get_already_posted_group_ids(posted_log_path) if auto_skip else set()
