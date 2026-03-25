@@ -326,7 +326,7 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
         "rest_duration_minutes",
     }
     bool_fields = {"dry_run", "auto_skip"}
-    str_fields = {"rotation_mode", "template_file"}
+    str_fields = {"template_file"}
 
     for key in int_fields:
         if key not in posting_rules:
@@ -1271,15 +1271,6 @@ def _render_page() -> str:
           <label class="mini-lbl" for="prTemplateFile">Template File</label>
           <input id="prTemplateFile" type="text" placeholder="post_1.yaml">
         </div>
-        <div class="field">
-          <label class="mini-lbl" for="prRotationMode">Rotation Mode</label>
-          <select id="prRotationMode">
-            <option value="single">single</option>
-            <option value="sequential">sequential</option>
-            <option value="round-robin">round-robin</option>
-            <option value="random">random</option>
-          </select>
-        </div>
       </div>
       <div class="frow">
         <div class="field">
@@ -1522,7 +1513,7 @@ def _render_page() -> str:
 
   function renderPostingRulesSummary(rules) {
     document.getElementById('postingRulesSummary').textContent =
-      `Template ${rules.template_file || '-'} | Mode ${rules.rotation_mode || '-'} | Delay ${rules.min_delay_minutes || '-'}-${rules.max_delay_minutes || '-'}m`;
+      `Template ${rules.template_file || '-'} | Delay ${rules.min_delay_minutes || '-'}-${rules.max_delay_minutes || '-'}m | Skip ${rules.auto_skip ? 'on' : 'off'}`;
   }
 
   function openBrowserRulesModal() {
@@ -1561,7 +1552,6 @@ def _render_page() -> str:
   function openPostingRulesModal() {
     const p = globalPostingSnapshot || {};
     document.getElementById('prTemplateFile').value = String(p.template_file || '');
-    document.getElementById('prRotationMode').value = String(p.rotation_mode || 'single');
     document.getElementById('prMinDelay').value = String(p.min_delay_minutes || '');
     document.getElementById('prMaxDelay').value = String(p.max_delay_minutes || '');
     document.getElementById('prMaxPosts').value = String(p.max_posts_per_session || '');
@@ -1996,7 +1986,6 @@ def _render_page() -> str:
   document.getElementById('savePostingRulesBtn').addEventListener('click', async () => {
     const payload = {
       template_file: (document.getElementById('prTemplateFile').value || '').trim(),
-      rotation_mode: (document.getElementById('prRotationMode').value || '').trim(),
       min_delay_minutes: parseInt((document.getElementById('prMinDelay').value || '').trim(), 10),
       max_delay_minutes: parseInt((document.getElementById('prMaxDelay').value || '').trim(), 10),
       max_posts_per_session: parseInt((document.getElementById('prMaxPosts').value || '').trim(), 10),
@@ -2006,8 +1995,8 @@ def _render_page() -> str:
       dry_run: document.getElementById('prDryRun').value === 'true',
       auto_skip: document.getElementById('prAutoSkip').value === 'true',
     };
-    if (!payload.template_file || !payload.rotation_mode) {
-      toast('Template file and rotation mode are required.', true);
+    if (!payload.template_file) {
+      toast('Template file is required.', true);
       return;
     }
     if ([

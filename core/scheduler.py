@@ -11,12 +11,7 @@ from typing import Any
 
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
-from core.post_queue import (
-    load_queue_state,
-    load_templates,
-    plan_templates_for_session,
-    save_queue_state,
-)
+from core.post_queue import load_templates
 from core.session_manager import (
     camoufox_kwargs,
     configure_page_window,
@@ -686,7 +681,6 @@ def run_scheduler(
     cooldown_hours = int(posting_cfg.get("cooldown_hours", 24))
     rest_every = int(posting_cfg.get("rest_every_n_posts", 10))
     rest_minutes = int(posting_cfg.get("rest_duration_minutes", 30))
-    rotation_mode = str(posting_cfg.get("rotation_mode", "single"))
     selected_template_file = str(posting_cfg.get("template_file", "")).strip()
     auto_skip = bool(posting_cfg.get("auto_skip", False))
 
@@ -736,28 +730,23 @@ def run_scheduler(
     if auto_skip and skipped_auto > 0:
         log_event(f"Auto-skip: skipped {skipped_auto} already-posted groups.", context={"skipped": skipped_auto})
 
-    templates = load_templates()
-    if selected_template_file:
-        templates = [t for t in templates if str(t.get("template_file", "")).strip() == selected_template_file]
-
     if not eligible_groups:
         log_event("No eligible groups found. Check groups.json, cooldowns, and blacklist.")
         return
 
-    if not templates:
-        log_event("No templates found in templates/. Add post_*.yaml files.")
-        return
+    # Load the single configured template
+    all_templates = load_templates()
+    template: dict[str, Any] | None = None
+    if selected_template_file:
+        for t in all_templates:
+            if str(t.get("template_file", "")).strip() == selected_template_file:
+                template = t
+                break
+    elif all_templates:
+        template = all_templates[0]
 
-    queue_state = load_queue_state(queue_state_path)
-    planned_templates, next_queue_state = plan_templates_for_session(
-        rotation_mode,
-        len(eligible_groups),
-        templates,
-        queue_state,
-    )
-
-    if not planned_templates:
-        log_event("No template plan could be generated.", level="ERROR")
+    if template is None:
+        log_event(f"Template '{selected_template_file}' not found in templates/.", level="ERROR")
         return
 
     session_path = ensure_session(config_path, validate_existing=False)
@@ -777,7 +766,7 @@ def run_scheduler(
     log_event(
         "Scheduler started.",
         context={
-            "rotation_mode": rotation_mode,
+            "template": selected_template_file,
             "eligible_groups": len(eligible_groups),
             "max_posts": max_posts,
             "dry_run": dry_run,
@@ -797,7 +786,7 @@ def run_scheduler(
                 if stop_requested or not _control_checkpoint(pause_event, stop_event):
                     break
 
-                template = planned_templates[index]
+                # template is already set above
                 success = False
                 detail = "Unknown error"
                 for attempt in range(1, retry_max_attempts + 1):
@@ -924,7 +913,6 @@ def run_scheduler(
         log_exception("Scheduler failed unexpectedly.", exc)
         raise
 
-    save_queue_state(queue_state_path, next_queue_state)
     _save_groups(groups_path, groups)
 
     log_event(
@@ -932,6 +920,6 @@ def run_scheduler(
         context={
             "posted_count": posted_count,
             "dry_run": dry_run,
-            "rotation_mode": rotation_mode,
+            "template": selected_template_file,
         },
     )

@@ -15,10 +15,9 @@ groups:
     min_scroll_rounds_before_stop: 8
 posting:
   template_file: post_1.yaml
-  rotation_mode: single
-  min_delay_minutes: 3
-  max_delay_minutes: 5
-  max_posts_per_session: 50
+  min_delay_minutes: 1
+  max_delay_minutes: 3
+  max_posts_per_session: 1000
   cooldown_hours: 24
   rest_every_n_posts: 10
   rest_duration_minutes: 10
