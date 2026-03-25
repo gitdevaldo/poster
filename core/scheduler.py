@@ -81,16 +81,37 @@ def _is_group_on_cooldown(group: dict[str, Any], cooldown_hours: int) -> bool:
     return datetime.now(timezone.utc) - ts < timedelta(hours=cooldown_hours)
 
 
+def _load_posted_log(posted_log_path: Path) -> list[dict[str, Any]]:
+    """Load posted log entries from disk."""
+    if not posted_log_path.exists():
+        return []
+    try:
+        raw = json.loads(posted_log_path.read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            return [item for item in raw if isinstance(item, dict)]
+    except Exception:
+        pass
+    return []
+
+
+def _get_already_posted_group_ids(posted_log_path: Path) -> set[str]:
+    """Return set of group IDs/URLs that have status 'posted' in the log."""
+    entries = _load_posted_log(posted_log_path)
+    posted: set[str] = set()
+    for entry in entries:
+        if str(entry.get("status", "")).strip().lower() == "posted" and not entry.get("dry_run", False):
+            gid = str(entry.get("group_id", "")).strip()
+            gurl = str(entry.get("group_url", "")).strip()
+            if gid:
+                posted.add(gid)
+            if gurl:
+                posted.add(gurl)
+    return posted
+
+
 def _append_posted_log(posted_log_path: Path, entry: dict[str, Any]) -> None:
     posted_log_path.parent.mkdir(parents=True, exist_ok=True)
-    data: list[dict[str, Any]] = []
-    if posted_log_path.exists():
-        try:
-            raw = json.loads(posted_log_path.read_text(encoding="utf-8"))
-            if isinstance(raw, list):
-                data = [item for item in raw if isinstance(item, dict)]
-        except Exception:
-            data = []
+    data = _load_posted_log(posted_log_path)
 
     data.append(entry)
     with posted_log_path.open("w", encoding="utf-8") as f:
@@ -667,6 +688,7 @@ def run_scheduler(
     rest_minutes = int(posting_cfg.get("rest_duration_minutes", 30))
     rotation_mode = str(posting_cfg.get("rotation_mode", "single"))
     selected_template_file = str(posting_cfg.get("template_file", "")).strip()
+    auto_skip = bool(posting_cfg.get("auto_skip", False))
 
     home_url = "https://www.facebook.com/"
     composer_selectors: list[str] = []
@@ -700,7 +722,9 @@ def run_scheduler(
 
     groups = [g for g in _load_groups(groups_path) if bool(g.get("active", True))]
     blacklist = _load_blacklist(blacklist_path)
+    already_posted = _get_already_posted_group_ids(posted_log_path) if auto_skip else set()
     eligible_groups: list[dict[str, Any]] = []
+    skipped_auto = 0
     for group in groups:
         url = str(group.get("url", "")).strip()
         gid = str(group.get("id", "")).strip() or _group_id_from_url(url)
@@ -708,7 +732,12 @@ def run_scheduler(
             continue
         if _is_group_on_cooldown(group, cooldown_hours):
             continue
+        if auto_skip and (gid in already_posted or url in already_posted):
+            skipped_auto += 1
+            continue
         eligible_groups.append(group)
+    if auto_skip and skipped_auto > 0:
+        log_event(f"Auto-skip: skipped {skipped_auto} already-posted groups.", context={"skipped": skipped_auto})
 
     templates = load_templates()
     if selected_template_file:

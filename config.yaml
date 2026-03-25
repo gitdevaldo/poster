@@ -22,6 +22,7 @@ posting:
   cooldown_hours: 24
   rest_every_n_posts: 10
   rest_duration_minutes: 10
+  auto_skip: true
   dry_run: true
 browser:
   headless: false
