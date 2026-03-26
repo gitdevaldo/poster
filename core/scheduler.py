@@ -147,6 +147,25 @@ def _detect_captcha_block(page: Any, keywords: list[str]) -> bool:
     return has_captcha_ui or (url_indicates_challenge and keyword_hits)
 
 
+def _detect_paused_group(page: Any) -> bool:
+    """Detect if the group page shows a 'This group is paused' notice."""
+    paused_phrases = ["this group is paused", "grup ini dijeda"]
+    try:
+        visible_text = page.locator("body").inner_text(timeout=2000).lower()
+        if any(phrase in visible_text for phrase in paused_phrases):
+            return True
+    except Exception:
+        pass
+    # Fallback: check for the specific span element
+    for phrase in paused_phrases:
+        try:
+            loc = page.locator(f"span:has-text('{phrase}')")
+            if loc.count() > 0 and loc.first.is_visible(timeout=500):
+                return True
+        except Exception:
+            continue
+    return False
+
 def _save_failure_screenshot(page: Any, screenshots_dir: Path, group_id: str, reason: str) -> str | None:
     screenshots_dir.mkdir(parents=True, exist_ok=True)
     safe_reason = re.sub(r"[^a-zA-Z0-9_-]+", "_", reason).strip("_")[:40] or "error"
@@ -533,6 +552,10 @@ def _post_to_group(
 
     page.wait_for_timeout(random.randint(2000, 4000))
 
+    if _detect_paused_group(page):
+        log_event("Group is paused, skipping.", context={"group": group_name})
+        return False, "GROUP_PAUSED"
+
     if _detect_captcha_block(page, captcha_keywords):
         return False, "CAPTCHA_DETECTED"
     if _detect_keyword_block(page, rate_limit_keywords):
@@ -782,7 +805,7 @@ def run_scheduler(
                     )
                     if success:
                         break
-                    if detail in {"CAPTCHA_DETECTED", "RATE_LIMIT_DETECTED", "GROUP_404"}:
+                    if detail in {"CAPTCHA_DETECTED", "RATE_LIMIT_DETECTED", "GROUP_404", "GROUP_PAUSED"}:
                         break
                     if attempt < retry_max_attempts:
                         backoff_seconds = 0.2 if dry_run else retry_backoff_seconds * attempt
@@ -844,6 +867,10 @@ def run_scheduler(
                         screenshot_path = _save_failure_screenshot(page, screenshots_dir, group_id or "group", detail)
 
                     if detail == "GROUP_404" and mark_inactive_on_404:
+                        group["active"] = False
+                        group["updated_at"] = now_iso
+
+                    if detail == "GROUP_PAUSED":
                         group["active"] = False
                         group["updated_at"] = now_iso
 
