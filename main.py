@@ -16,9 +16,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Facebook Group Auto-Poster")
     parser.add_argument("--account", type=str, help="Run using an account id from config.yaml accounts section")
     parser.add_argument("--add", dest="add_account", type=str, help="Add a new account profile into config.yaml")
-    parser.add_argument("--ui", action="store_true", help="Start local web UI")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="UI bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8080, help="UI bind port (default: 8080)")
+    parser.add_argument("--port", type=int, default=0, help="UI bind port (default: 0 for random)")
     parser.add_argument("--setup", action="store_true", help="Initialize login session and scrape groups")
     parser.add_argument("--scrape-only", action="store_true", help="Only refresh group inventory")
     parser.add_argument(
@@ -51,10 +50,6 @@ def main() -> None:
         print(message)
         return
 
-    if args.ui:
-        run_web_ui(config_path=config_path, host=args.host, port=args.port)
-        return
-
     if args.account:
         os.environ[ACCOUNT_ENV_VAR] = args.account.strip()
 
@@ -81,8 +76,10 @@ def main() -> None:
         run_scheduler(config_path, run_once=True, force_dry_run=force_dry_run)
         return
 
-    run_scheduler(config_path, run_once=False, force_dry_run=force_dry_run)
+    # Default: start the web UI control panel
+    run_web_ui(config_path=config_path, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
     main()
+

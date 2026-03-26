@@ -286,10 +286,8 @@ def _update_groups_rules(config_path: Path, groups_rules: dict[str, Any]) -> tup
 
     int_fields = {
         "rescrape_every_days",
-        "max_scrolls",
         "idle_rounds_to_stop",
         "scroll_wait_ms",
-        "min_scroll_rounds_before_stop",
     }
 
     scrape_cfg = dict(groups_cfg.get("scrape", {})) if isinstance(groups_cfg.get("scrape"), dict) else {}
@@ -320,8 +318,6 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
     int_fields = {
         "min_delay_minutes",
         "max_delay_minutes",
-        "max_posts_per_session",
-        "cooldown_hours",
         "rest_every_n_posts",
         "rest_duration_minutes",
     }
@@ -1228,10 +1224,6 @@ def _render_page() -> str:
           <label class="mini-lbl" for="grRescrapeDays">Rescrape Every Days</label>
           <input id="grRescrapeDays" type="text" placeholder="7">
         </div>
-        <div class="field">
-          <label class="mini-lbl" for="grMaxScrolls">Max Scrolls</label>
-          <input id="grMaxScrolls" type="text" placeholder="30">
-        </div>
       </div>
       <div class="frow">
         <div class="field">
@@ -1241,12 +1233,6 @@ def _render_page() -> str:
         <div class="field">
           <label class="mini-lbl" for="grScrollWaitMs">Scroll Wait (ms)</label>
           <input id="grScrollWaitMs" type="text" placeholder="1400">
-        </div>
-      </div>
-      <div class="frow">
-        <div class="field">
-          <label class="mini-lbl" for="grMinRounds">Min Scroll Rounds Before Stop</label>
-          <input id="grMinRounds" type="text" placeholder="8">
         </div>
       </div>
       <div class="frow">
@@ -1280,16 +1266,6 @@ def _render_page() -> str:
         <div class="field">
           <label class="mini-lbl" for="prMaxDelay">Max Delay (minutes)</label>
           <input id="prMaxDelay" type="text" placeholder="5">
-        </div>
-      </div>
-      <div class="frow">
-        <div class="field">
-          <label class="mini-lbl" for="prMaxPosts">Max Posts Per Session</label>
-          <input id="prMaxPosts" type="text" placeholder="15">
-        </div>
-        <div class="field">
-          <label class="mini-lbl" for="prCooldown">Cooldown Hours</label>
-          <input id="prCooldown" type="text" placeholder="24">
         </div>
       </div>
       <div class="frow">
@@ -1508,7 +1484,7 @@ def _render_page() -> str:
   function renderGroupsRulesSummary(rules) {
     const scrape = rules.scrape || {};
     document.getElementById('groupsRulesSummary').textContent =
-      `Rescrape ${rules.rescrape_every_days || '-'}d | Scrolls ${scrape.max_scrolls || '-'} | IdleStop ${scrape.idle_rounds_to_stop || '-'}`;
+      `Rescrape ${rules.rescrape_every_days || '-'}d | IdleStop ${scrape.idle_rounds_to_stop || '-'}`;
   }
 
   function renderPostingRulesSummary(rules) {
@@ -1538,10 +1514,8 @@ def _render_page() -> str:
     const g = globalGroupsSnapshot || {};
     const s = g.scrape || {};
     document.getElementById('grRescrapeDays').value = String(g.rescrape_every_days || '');
-    document.getElementById('grMaxScrolls').value = String(s.max_scrolls || '');
     document.getElementById('grIdleRounds').value = String(s.idle_rounds_to_stop || '');
     document.getElementById('grScrollWaitMs').value = String(s.scroll_wait_ms || '');
-    document.getElementById('grMinRounds').value = String(s.min_scroll_rounds_before_stop || '');
     document.getElementById('groupsRulesModal').classList.add('show');
   }
 
@@ -1554,8 +1528,6 @@ def _render_page() -> str:
     document.getElementById('prTemplateFile').value = String(p.template_file || '');
     document.getElementById('prMinDelay').value = String(p.min_delay_minutes || '');
     document.getElementById('prMaxDelay').value = String(p.max_delay_minutes || '');
-    document.getElementById('prMaxPosts').value = String(p.max_posts_per_session || '');
-    document.getElementById('prCooldown').value = String(p.cooldown_hours || '');
     document.getElementById('prRestEvery').value = String(p.rest_every_n_posts || '');
     document.getElementById('prRestDuration').value = String(p.rest_duration_minutes || '');
     document.getElementById('prDryRun').value = String(p.dry_run !== false);
@@ -1971,10 +1943,8 @@ def _render_page() -> str:
   document.getElementById('saveGroupsRulesBtn').addEventListener('click', async () => {
     const payload = {
       rescrape_every_days: parseInt((document.getElementById('grRescrapeDays').value || '').trim(), 10),
-      max_scrolls: parseInt((document.getElementById('grMaxScrolls').value || '').trim(), 10),
       idle_rounds_to_stop: parseInt((document.getElementById('grIdleRounds').value || '').trim(), 10),
       scroll_wait_ms: parseInt((document.getElementById('grScrollWaitMs').value || '').trim(), 10),
-      min_scroll_rounds_before_stop: parseInt((document.getElementById('grMinRounds').value || '').trim(), 10),
     };
     if (Object.values(payload).some(Number.isNaN)) {
       toast('Groups rules values must be valid integers.', true);
@@ -1988,8 +1958,6 @@ def _render_page() -> str:
       template_file: (document.getElementById('prTemplateFile').value || '').trim(),
       min_delay_minutes: parseInt((document.getElementById('prMinDelay').value || '').trim(), 10),
       max_delay_minutes: parseInt((document.getElementById('prMaxDelay').value || '').trim(), 10),
-      max_posts_per_session: parseInt((document.getElementById('prMaxPosts').value || '').trim(), 10),
-      cooldown_hours: parseInt((document.getElementById('prCooldown').value || '').trim(), 10),
       rest_every_n_posts: parseInt((document.getElementById('prRestEvery').value || '').trim(), 10),
       rest_duration_minutes: parseInt((document.getElementById('prRestDuration').value || '').trim(), 10),
       dry_run: document.getElementById('prDryRun').value === 'true',
@@ -2002,8 +1970,6 @@ def _render_page() -> str:
     if ([
       payload.min_delay_minutes,
       payload.max_delay_minutes,
-      payload.max_posts_per_session,
-      payload.cooldown_hours,
       payload.rest_every_n_posts,
       payload.rest_duration_minutes,
     ].some(Number.isNaN)) {
@@ -2223,7 +2189,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
             return
 
     server = ThreadingHTTPServer((host, int(port)), Handler)
-    print(f"UI running at http://{host}:{port}")
+    actual_port = server.server_port
+    print(f"UI running at http://{host}:{actual_port}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
