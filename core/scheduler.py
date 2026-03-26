@@ -61,20 +61,6 @@ def _group_id_from_url(url: str) -> str:
     return match.group(1) if match else ""
 
 
-def _is_group_on_cooldown(group: dict[str, Any], cooldown_hours: int) -> bool:
-    last_posted = group.get("last_posted")
-    if not isinstance(last_posted, str) or not last_posted.strip():
-        return False
-    try:
-        ts = datetime.fromisoformat(last_posted)
-    except ValueError:
-        return False
-
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-
-    return datetime.now(timezone.utc) - ts < timedelta(hours=cooldown_hours)
-
 
 def _load_posted_log(posted_log_path: Path) -> list[dict[str, Any]]:
     """Load posted log entries from disk."""
@@ -677,8 +663,6 @@ def run_scheduler(
     posting_cfg = config.get("posting", {})
     min_delay = int(posting_cfg.get("min_delay_minutes", 3))
     max_delay = int(posting_cfg.get("max_delay_minutes", 5))
-    max_posts = int(posting_cfg.get("max_posts_per_session", 15))
-    cooldown_hours = int(posting_cfg.get("cooldown_hours", 24))
     rest_every = int(posting_cfg.get("rest_every_n_posts", 10))
     rest_minutes = int(posting_cfg.get("rest_duration_minutes", 30))
     selected_template_file = str(posting_cfg.get("template_file", "")).strip()
@@ -711,7 +695,8 @@ def run_scheduler(
     configured_dry_run = bool(posting_cfg.get("dry_run", True))
     dry_run = configured_dry_run if force_dry_run is None else force_dry_run
 
-    groups = [g for g in _load_groups(groups_path) if bool(g.get("active", True))]
+    all_groups = _load_groups(groups_path)
+    groups = [g for g in all_groups if bool(g.get("active", True))]
     blacklist = _load_blacklist(blacklist_path)
     already_posted = _get_already_posted_group_ids(posted_log_path) if auto_skip else set()
     eligible_groups: list[dict[str, Any]] = []
@@ -720,8 +705,6 @@ def run_scheduler(
         url = str(group.get("url", "")).strip()
         gid = str(group.get("id", "")).strip() or _group_id_from_url(url)
         if url in blacklist or gid in blacklist:
-            continue
-        if _is_group_on_cooldown(group, cooldown_hours):
             continue
         if auto_skip and (gid in already_posted or url in already_posted):
             skipped_auto += 1
@@ -768,7 +751,6 @@ def run_scheduler(
         context={
             "template": selected_template_file,
             "eligible_groups": len(eligible_groups),
-            "max_posts": max_posts,
             "dry_run": dry_run,
         },
     )
@@ -781,8 +763,6 @@ def run_scheduler(
             ensure_logged_in_in_page(page, config, session_path)
 
             for index, group in enumerate(eligible_groups):
-                if posted_count >= max_posts:
-                    break
                 if stop_requested or not _control_checkpoint(pause_event, stop_event):
                     break
 
@@ -913,7 +893,7 @@ def run_scheduler(
         log_exception("Scheduler failed unexpectedly.", exc)
         raise
 
-    _save_groups(groups_path, groups)
+    _save_groups(groups_path, all_groups)
 
     log_event(
         "Scheduler cycle completed.",
