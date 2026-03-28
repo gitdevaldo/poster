@@ -4,6 +4,23 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 13:28
+
+**Add posting progress indicator (Post X/X) to header**
+
+Added a dynamic progress indicator in the top right header that shows current posting progress:
+- Displays "📮 Post 5/10" format when posting is running
+- Automatically hides when posting completes or no posting is active
+- Parses "Processing group X/Y" messages from live logs
+
+Backend: Added progress logging in scheduler.py for each group being processed.
+
+**Files changed:**
+- core/web_ui.py (progress badge + JS parsing logic)
+- core/scheduler.py (added progress log event in posting loop)
+
+---
+
 ## 2026-03-28 13:23
 
 **Remove Global Settings summary info from sidebar**

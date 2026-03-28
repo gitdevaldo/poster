@@ -928,6 +928,7 @@ def _render_page() -> str:
     <div class="live-badge">
       <span class="live-dot"></span>
       <span id="lastUpdated">Connecting…</span>
+      <span id="postProgress" style="margin-left:12px;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;display:none"></span>
     </div>
   </header>
 
@@ -1369,6 +1370,7 @@ def _render_page() -> str:
     const tbody = document.getElementById('liveLogsBody');
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><span class="empty-ico">🫙</span><span class="empty-txt">No logs yet</span></div></td></tr>';
+      updatePostProgress(null);
       return;
     }
 
@@ -1381,11 +1383,47 @@ def _render_page() -> str:
       </tr>`;
     }).join('');
 
+    // Extract posting progress from recent logs
+    updatePostProgressFromLogs(rows);
+
     const autoScroll = document.getElementById('logAutoScroll').checked;
     if (autoScroll) {
       const wrap = document.getElementById('liveLogWrap');
       wrap.scrollTop = wrap.scrollHeight;
     }
+  }
+
+  function updatePostProgressFromLogs(rows) {
+    // Look for "Processing group X/Y" pattern in recent logs (last 20)
+    const recentLogs = rows.slice(-20);
+    let latestProgress = null;
+    
+    for (let i = recentLogs.length - 1; i >= 0; i--) {
+      const msg = recentLogs[i].message || '';
+      // Match "Processing group 5/10: Group Name"
+      const match = msg.match(/Processing group (\d+)\/(\d+)/);
+      if (match) {
+        latestProgress = { current: parseInt(match[1]), total: parseInt(match[2]) };
+        break;
+      }
+      // Check for completion messages
+      if (msg.includes('Posting session complete') || msg.includes('No eligible groups')) {
+        latestProgress = null;
+        break;
+      }
+    }
+    
+    updatePostProgress(latestProgress);
+  }
+
+  function updatePostProgress(progress) {
+    const el = document.getElementById('postProgress');
+    if (!progress) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'inline';
+    el.textContent = `📮 Post ${progress.current}/${progress.total}`;
   }
 
   async function loadLogs() {

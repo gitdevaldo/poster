@@ -789,6 +789,14 @@ def run_scheduler(
                 if stop_requested or not _control_checkpoint(pause_event, stop_event):
                     break
 
+                total_groups = len(eligible_groups)
+                current_num = index + 1
+                group_name = str(group.get("name", "Unknown Group"))
+                log_event(
+                    f"Processing group {current_num}/{total_groups}: {group_name}",
+                    context={"progress": current_num, "total": total_groups, "group": group_name}
+                )
+
                 # template is already set above
                 success = False
                 detail = "Unknown error"
