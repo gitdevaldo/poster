@@ -4,6 +4,17 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 11:00
+
+**Fix template dropdown resetting to active template**
+
+Preserve user's current template selection when state reloads, instead of always resetting to the account's active template. Only fall back to active template if current selection is no longer valid.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-28 10:55
 
 **Remove Quick Actions label from toolbar**

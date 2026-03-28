@@ -1584,8 +1584,9 @@ def _render_page() -> str:
 
   function renderTemplatePicker(data) {
     templatesSnapshot = data.templates || [];
-    const selectedTemplate = String((data.posting || {}).template_file || '').trim();
+    const activeTemplate = String((data.posting || {}).template_file || '').trim();
     const sel = document.getElementById('templateSelect');
+    const currentSelection = sel.value || '';
 
     if (!templatesSnapshot.length) {
       sel.innerHTML = '<option value="">No templates found</option>';
@@ -1598,8 +1599,11 @@ def _render_page() -> str:
       return `<option value="${esc(t.template_file)}">${esc(title)} (${esc(t.template_file)})</option>`;
     }).join('');
 
-    if (selectedTemplate && templatesSnapshot.some(t => t.template_file === selectedTemplate)) {
-      sel.value = selectedTemplate;
+    // Preserve user's current selection if still valid, otherwise fall back to active template
+    if (currentSelection && templatesSnapshot.some(t => t.template_file === currentSelection)) {
+      sel.value = currentSelection;
+    } else if (activeTemplate && templatesSnapshot.some(t => t.template_file === activeTemplate)) {
+      sel.value = activeTemplate;
     }
     updateTemplatePreview(sel.value || '');
   }
