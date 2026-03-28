@@ -1092,6 +1092,7 @@ def _render_page() -> str:
     <div class="frow" style="margin-top:12px">
       <button id="openEditTemplateBtn" class="btn-yellow" type="button">✏️ Edit Post</button>
       <button id="openAddTemplateBtn" class="btn-primary" type="button">➕ Add Post</button>
+      <button id="deleteTemplateBtn" class="btn-red" type="button">🗑️ Delete</button>
     </div>
   </div>
 </div>
@@ -1539,6 +1540,8 @@ def _render_page() -> str:
 
   function closeTemplateEditorModal() {
     document.getElementById('templateEditorModal').classList.remove('show');
+    // Clear editor state on close to prevent stale data
+    fillTemplateEditor(null);
   }
 
   function openTemplateEditorModal(mode) {
@@ -1596,7 +1599,9 @@ def _render_page() -> str:
 
     sel.innerHTML = templatesSnapshot.map(t => {
       const title = t.title || t.template_file;
-      return `<option value="${esc(t.template_file)}">${esc(title)} (${esc(t.template_file)})</option>`;
+      const isActive = t.template_file === activeTemplate;
+      const label = isActive ? `★ ${esc(title)} (${esc(t.template_file)})` : `${esc(title)} (${esc(t.template_file)})`;
+      return `<option value="${esc(t.template_file)}">${label}</option>`;
     }).join('');
 
     // Preserve user's current selection if still valid, otherwise fall back to active template
@@ -1871,13 +1876,25 @@ def _render_page() -> str:
     if (!result || !result.ok) {
       return;
     }
-    const latestSelect = document.getElementById('templateSelect');
-    const options = Array.from(latestSelect.options).map(o => o.value).filter(Boolean);
-    if (options.length) {
-      latestSelect.value = options[options.length - 1];
-      updateTemplatePreview(latestSelect.value);
+    // Get the new template filename from the result message
+    const match = (result.message || '').match(/Created template '([^']+)'/);
+    const newFile = match ? match[1] : null;
+    if (newFile && selectedAccount) {
+      // Auto-set the new template as active for this account
+      await callAction('set_template', selectedAccount, '', newFile);
     }
     closeTemplateEditorModal();
+  });
+  document.getElementById('deleteTemplateBtn').addEventListener('click', async () => {
+    const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
+    if (!selectedTemplate) {
+      toast('Select a template first.', true);
+      return;
+    }
+    if (!confirm(`Delete template "${selectedTemplate}"? This cannot be undone.`)) {
+      return;
+    }
+    await callAction('delete_template', selectedAccount, '', selectedTemplate);
   });
 
   document.getElementById('groupFilter').addEventListener('input', () => {
@@ -2047,6 +2064,15 @@ def _execute_account_action(
       new_file = _next_template_filename(template_dir)
       _save_template_file(template_dir / new_file, payload)
       return True, f"Created template '{new_file}'."
+    if action == "delete_template":
+      normalized_template = template_file.strip()
+      if not normalized_template:
+        return False, "Template file is required."
+      template_path = Path("templates") / normalized_template
+      if not template_path.exists():
+        return False, f"Template '{normalized_template}' not found."
+      template_path.unlink()
+      return True, f"Deleted template '{normalized_template}'."
     if action == "update_browser_rules":
       return _update_browser_rules(config_path, browser_rules or {})
     if action == "update_groups_rules":

@@ -4,6 +4,20 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 11:06
+
+**Fix template feature issues 3-6**
+
+- Issue 3: Clear editor form state when modal closes to prevent stale data persisting
+- Issue 4: Add delete template functionality with confirmation dialog
+- Issue 5: Show ★ indicator for active template in dropdown
+- Issue 6: Auto-set newly created template as active for the account
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-28 11:00
 
 **Fix template dropdown resetting to active template**
