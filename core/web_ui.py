@@ -1012,7 +1012,6 @@ def _render_page() -> str:
         </div>
 
         <div class="toolbar">
-          <div class="toolbar-lbl">Quick Actions</div>
           <div class="toolbar-btns" id="selectedActions">
             <button type="button" data-action="test_session">🔍 Test Session</button>
             <button type="button" data-action="setup_session">🔐 Setup Session</button>
