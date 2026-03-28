@@ -4,6 +4,23 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 13:23
+
+**Remove Global Settings summary info from sidebar**
+
+Removed the info text lines from Global Settings section:
+- "Locale id-ID | TZ Asia/Jakarta | Headless true | Humanize false"
+- "Rescrape 7d | IdleStop 4"
+- "Template ... | Delay ... | Skip ..."
+
+Kept only the three buttons (Browser Rules, Groups Rules, Posting Rules).
+Also removed the unused JS render functions.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-28 12:58
 
 **Add Dual-Mode Login (Visual/Headless) to PRD and Implementation Plan**

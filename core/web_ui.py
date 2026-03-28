@@ -970,9 +970,6 @@ def _render_page() -> str:
 
         <div class="settings-box">
           <div class="mini-lbl">Global Settings</div>
-          <div id="browserRulesSummary" class="mono" style="margin-bottom:6px">Browser: loading…</div>
-          <div id="groupsRulesSummary" class="mono" style="margin-bottom:6px">Groups: loading…</div>
-          <div id="postingRulesSummary" class="mono" style="margin-bottom:10px">Posting: loading…</div>
           <div class="frow" style="margin:0">
             <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
             <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
@@ -1494,25 +1491,6 @@ def _render_page() -> str:
     document.getElementById('templateModal').classList.remove('show');
   }
 
-  function renderBrowserRulesSummary(rules) {
-    const locale = String(rules.locale || '-');
-    const timezone = String(rules.timezone || '-');
-    const headless = rules.headless ? 'true' : 'false';
-    const humanize = rules.humanize ? 'true' : 'false';
-    document.getElementById('browserRulesSummary').textContent = `Locale ${locale} | TZ ${timezone} | Headless ${headless} | Humanize ${humanize}`;
-  }
-
-  function renderGroupsRulesSummary(rules) {
-    const scrape = rules.scrape || {};
-    document.getElementById('groupsRulesSummary').textContent =
-      `Rescrape ${rules.rescrape_every_days || '-'}d | IdleStop ${scrape.idle_rounds_to_stop || '-'}`;
-  }
-
-  function renderPostingRulesSummary(rules) {
-    document.getElementById('postingRulesSummary').textContent =
-      `Template ${rules.template_file || '-'} | Delay ${rules.min_delay_minutes || '-'}-${rules.max_delay_minutes || '-'}m | Skip ${rules.auto_skip ? 'on' : 'off'}`;
-  }
-
   function openBrowserRulesModal() {
     const r = browserRulesSnapshot || {};
     document.getElementById('brHeadless').value = String(!!r.headless);
@@ -1796,9 +1774,6 @@ def _render_page() -> str:
       globalGroupsSnapshot = data.global_groups || {};
       globalPostingSnapshot = data.global_posting || {};
       renderTemplatePicker(data);
-      renderBrowserRulesSummary(browserRulesSnapshot);
-      renderGroupsRulesSummary(globalGroupsSnapshot);
-      renderPostingRulesSummary(globalPostingSnapshot);
       document.getElementById('selectedTitle').textContent =
         selectedAccount ? `Actions — ${selectedAccount}` : 'Select an account';
       renderQuickActions(data);
