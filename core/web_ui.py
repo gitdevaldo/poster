@@ -1298,6 +1298,28 @@ def _render_page() -> str:
   </div>
 </div>
 
+<div id="runLiveModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:420px">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-green">🚀</div>
+        <span>Run Live Posting</span>
+      </div>
+      <button id="closeRunLiveModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0;text-align:center">
+      <p style="margin:0 0 16px;font-size:15px"><strong>Reset posted history?</strong></p>
+      <p style="margin:0 0 20px;color:var(--muted);font-size:13px">
+        Choose whether to clear the posted log before running.
+      </p>
+      <div class="frow" style="justify-content:center;gap:12px">
+        <button id="runLiveResetBtn" class="btn-yellow" type="button">🔄 Reset & Post All</button>
+        <button id="runLiveKeepBtn" class="btn-green" type="button">▶️ Post New Only</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   let selectedAccount = '';
   let isBusy = false;
@@ -1809,21 +1831,31 @@ def _render_page() -> str:
     
     const action = btn.dataset.action;
     
-    // Special handling for run_once_live - ask about resetting posted log
+    // Special handling for run_once_live - show modal to ask about resetting posted log
     if (action === 'run_once_live') {
-      const resetLog = confirm(
-        'Reset posted history?\n\n' +
-        '• YES = Clear history and post to ALL groups\n' +
-        '• NO = Keep history and post to non-posted groups only'
-      );
-      if (resetLog) {
-        await callAction('clear_posted_log', selectedAccount);
-      }
-      await callAction('run_once_live', selectedAccount);
+      document.getElementById('runLiveModal').classList.add('show');
       return;
     }
     
     await callAction(action, selectedAccount);
+  });
+
+  document.getElementById('closeRunLiveModal').addEventListener('click', () => {
+    document.getElementById('runLiveModal').classList.remove('show');
+  });
+  document.getElementById('runLiveModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'runLiveModal') {
+      document.getElementById('runLiveModal').classList.remove('show');
+    }
+  });
+  document.getElementById('runLiveResetBtn').addEventListener('click', async () => {
+    document.getElementById('runLiveModal').classList.remove('show');
+    await callAction('clear_posted_log', selectedAccount);
+    await callAction('run_once_live', selectedAccount);
+  });
+  document.getElementById('runLiveKeepBtn').addEventListener('click', async () => {
+    document.getElementById('runLiveModal').classList.remove('show');
+    await callAction('run_once_live', selectedAccount);
   });
 
   document.getElementById('closeTemplateModal').addEventListener('click', closeTemplateModal);

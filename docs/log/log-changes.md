@@ -4,6 +4,20 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 11:24
+
+**Replace native confirm with styled modal for Run Live**
+
+Replace browser's native `confirm()` dialog with a styled modal matching the app's UI:
+- "🔄 Reset & Post All" button - clears history, posts to all groups
+- "▶️ Post New Only" button - keeps history, posts to non-posted only
+- Can close by clicking X or outside the modal
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-28 11:18
 
 **Add reset posted history dialog on Run Live**
