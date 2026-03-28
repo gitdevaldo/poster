@@ -936,19 +936,18 @@ def _render_page() -> str:
     <!-- Accounts -->
     <aside>
       <div class="card">
-        <div class="card-title">
-          <div class="t-icon ti-violet">👤</div>
-          Accounts
+        <div class="card-title" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="t-icon ti-violet">👤</div>
+            Accounts
+          </div>
+          <span class="active-badge">⚡ <span id="activeName">—</span></span>
         </div>
 
         <div class="stats">
           <div class="stat"><div class="stat-n" id="statTotal">0</div><div class="stat-l">Total</div></div>
           <div class="stat"><div class="stat-n" style="color:var(--green)" id="statEnabled">0</div><div class="stat-l">On</div></div>
           <div class="stat"><div class="stat-n" style="color:var(--pink)"  id="statDisabled">0</div><div class="stat-l">Off</div></div>
-        </div>
-
-        <div class="frow" style="margin-bottom:14px">
-          <span class="active-badge">⚡ <span id="activeName">—</span></span>
         </div>
 
         <div class="frow">
