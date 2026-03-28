@@ -4,6 +4,21 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 11:18
+
+**Add reset posted history dialog on Run Live**
+
+When clicking "Run Live" button, show a confirm dialog asking whether to reset posted history:
+- YES: Clear posted_log.json and post to ALL groups
+- NO: Keep history and post to non-posted groups only
+
+Added `clear_posted_log` backend action to delete the posted log file.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-28 11:06
 
 **Fix template feature issues 3-6**

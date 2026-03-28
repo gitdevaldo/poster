@@ -1806,7 +1806,24 @@ def _render_page() -> str:
     const btn = ev.target.closest('button[data-action]');
     if (!btn) return;
     if (!selectedAccount) { toast('Please select an account first.', true); return; }
-    await callAction(btn.dataset.action, selectedAccount);
+    
+    const action = btn.dataset.action;
+    
+    // Special handling for run_once_live - ask about resetting posted log
+    if (action === 'run_once_live') {
+      const resetLog = confirm(
+        'Reset posted history?\n\n' +
+        '• YES = Clear history and post to ALL groups\n' +
+        '• NO = Keep history and post to non-posted groups only'
+      );
+      if (resetLog) {
+        await callAction('clear_posted_log', selectedAccount);
+      }
+      await callAction('run_once_live', selectedAccount);
+      return;
+    }
+    
+    await callAction(action, selectedAccount);
   });
 
   document.getElementById('closeTemplateModal').addEventListener('click', closeTemplateModal);
@@ -2081,6 +2098,14 @@ def _execute_account_action(
       return _update_posting_rules(config_path, posting_rules or {})
 
     with _account_env(account_id):
+        if action == "clear_posted_log":
+            from core.config_loader import load_config
+            cfg = load_config(config_path)
+            paths_cfg = cfg.get("paths", {})
+            posted_log_path = Path(str(paths_cfg.get("posted_log", "data/posted_log.json")))
+            if posted_log_path.exists():
+                posted_log_path.unlink()
+            return True, "Posted history cleared."
         if action == "test_session":
             ok = validate_session(config_path)
             return (ok, "Session valid ✓" if ok else "Session invalid ✗")
