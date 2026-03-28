@@ -4,6 +4,34 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 12:58
+
+**Add Dual-Mode Login (Visual/Headless) to PRD and Implementation Plan**
+
+Added comprehensive documentation for the automated login feature:
+
+PRD Section 6.2 - Facebook Login (Dual Mode):
+- Mode A: Visual Browser (Windows/Desktop) - browser window visible for manual login
+- Mode B: Headless Automation (Linux/VPS) - credentials entered in Web UI, OTP handling
+- Login detection table (OTP, security checkpoint, errors)
+- Security considerations (no credential storage)
+
+Implementation Plan Phase 5 - Automated Login:
+- auto_login.py module with login/OTP functions
+- Login flow detection (success, OTP, errors)
+- Web UI login form for headless mode
+- Backend API endpoints (/api/fb-login, /api/fb-submit-otp)
+- Mode detection based on config
+- Security measures and error handling
+
+Updated timeline (now 9 phases, ~3-4 weeks) and file list.
+
+**Files changed:**
+- docs/license-system-prd.md
+- docs/plans/license-system-implementation.md
+
+---
+
 ## 2026-03-28 12:52
 
 **Add CI/CD Build Pipeline to PRD and Implementation Plan**

@@ -286,7 +286,134 @@ $ python main.py --setup
 ╚═══════════════════════════════════════════════════════════╝
 ```
 
-### 6.2 Web UI License Status
+### 6.2 Facebook Login (Dual Mode)
+
+The application supports two login modes based on the environment:
+
+#### Mode A: Visual Browser (Windows/Desktop)
+
+For users running on Windows or desktop environments with a display:
+
+```yaml
+# config.yaml
+browser:
+  headless: false  # Browser window visible
+```
+
+**Flow:**
+1. User clicks "Setup Account" in Web UI
+2. Browser window opens (visible)
+3. User manually logs into Facebook in the browser
+4. Session saved automatically when login detected
+5. Browser closes, ready to post
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  User's Desktop                                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────────────┐    ┌─────────────────────────┐    │
+│   │     Web UI          │    │   Camoufox Browser      │    │
+│   │                     │    │                         │    │
+│   │  [Setup Account]────┼───▶│   Facebook Login Page   │    │
+│   │                     │    │   [Email] [Password]    │    │
+│   │  Status: Waiting    │    │   [Login]               │    │
+│   │  for login...       │    │                         │    │
+│   └─────────────────────┘    └─────────────────────────┘    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Mode B: Headless Automation (Linux/VPS)
+
+For users running on headless servers without a display:
+
+```yaml
+# config.yaml
+browser:
+  headless: true  # No browser window (VPS mode)
+```
+
+**Flow:**
+1. User enters Facebook credentials in Web UI
+2. Backend automation logs in headlessly
+3. If OTP/2FA required, UI prompts for code
+4. User enters OTP, automation completes login
+5. Session saved, ready to post
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Web UI - Account Setup                                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   🔐 Facebook Login                                         │
+│                                                              │
+│   📧 Email:     [user@example.com              ]            │
+│   🔒 Password:  [••••••••••••                  ]            │
+│                                                              │
+│   [🚀 Login to Facebook]                                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Backend (Headless Camoufox)                                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ✓ Opening Facebook...                                     │
+│   ✓ Entering credentials...                                 │
+│   ⚠ OTP Required - Requesting from user...                  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Web UI - OTP Input                                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   🔢 Two-Factor Authentication Required                     │
+│                                                              │
+│   Facebook sent a code to your phone/email.                 │
+│   Enter the 6-digit code:                                   │
+│                                                              │
+│   [______]                                                  │
+│                                                              │
+│   [Submit OTP]  [Cancel]                                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Backend                                                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ✓ OTP submitted...                                        │
+│   ✓ Login successful!                                       │
+│   ✓ Session saved.                                          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Login Detection & Handling
+
+| Scenario | Detection Method | Action |
+|----------|------------------|--------|
+| Normal login | Success URL/element | ✅ Save session |
+| OTP/2FA (SMS) | OTP input field visible | → Request OTP from user |
+| OTP/2FA (Authenticator) | TOTP input visible | → Request code from user |
+| Security checkpoint | "Is this you?" page | → Auto-approve or notify |
+| Wrong password | Error message element | → Show error in UI |
+| Account locked | Lock message element | → Show error, suggest manual |
+| CAPTCHA | CAPTCHA element | → Notify user (unsupported) |
+
+#### Security Considerations
+
+- **Credentials NOT stored** — Only used during login, then discarded
+- **Session stored** — After login, only cookies/session saved (no password)
+- **Encrypted in transit** — Credentials sent over localhost only (Web UI → Backend)
+- **No logging** — Credentials never written to logs
+
+### 6.3 Web UI License Status
 
 Add license status card to dashboard showing:
 - Current tier
@@ -295,7 +422,7 @@ Add license status card to dashboard showing:
 - Machine ID (for support)
 - Deactivate button
 
-### 6.3 Error Messages
+### 6.4 Error Messages
 
 | Scenario | Message |
 |----------|---------|
