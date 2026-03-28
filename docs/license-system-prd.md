@@ -367,7 +367,246 @@ fb-autoposter-v1.0.0/
 
 ---
 
-## 9. Success Metrics
+## 9. Build & Release Pipeline
+
+### 9.1 CI/CD Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Developer Workflow                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. Modify source code (main.py, core/*.py)                             │
+│  2. Test locally (python main.py --dry-run)                             │
+│  3. Commit & push to private repository                                 │
+│  4. Create release tag: git tag v1.2.0 && git push --tags              │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ (triggers on tag push)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     GitHub Actions Build Pipeline                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐      │
+│   │  Build Linux     │  │  Build macOS     │  │  Build Windows   │      │
+│   │  (ubuntu-latest) │  │  (macos-latest)  │  │  (windows-latest)│      │
+│   │                  │  │                  │  │                  │      │
+│   │  • python 3.11   │  │  • python 3.11   │  │  • python 3.11   │      │
+│   │  • pip install   │  │  • pip install   │  │  • pip install   │      │
+│   │  • nuitka build  │  │  • nuitka build  │  │  • nuitka build  │      │
+│   └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘      │
+│            │                     │                     │                │
+│            ▼                     ▼                     ▼                │
+│   ┌──────────────────────────────────────────────────────────────┐      │
+│   │                    Upload Artifacts                          │      │
+│   │  • fb-poster-v1.2.0-linux-x64                               │      │
+│   │  • fb-poster-v1.2.0-macos-x64                               │      │
+│   │  • fb-poster-v1.2.0-windows-x64.exe                         │      │
+│   └──────────────────────────────────────────────────────────────┘      │
+│            │                                                            │
+│            ▼                                                            │
+│   ┌──────────────────────────────────────────────────────────────┐      │
+│   │              Create GitHub Release                           │      │
+│   │  • Generate SHA256 checksums                                 │      │
+│   │  • Attach all binaries                                       │      │
+│   │  • Auto-generate changelog from commits                      │      │
+│   └──────────────────────────────────────────────────────────────┘      │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Distribution Portal                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│   yoursite.com/downloads                                                │
+│   ├── fb-poster-v1.2.0-linux-x64          (88 MB)                       │
+│   ├── fb-poster-v1.2.0-macos-x64          (92 MB)                       │
+│   ├── fb-poster-v1.2.0-windows-x64.exe    (95 MB)                       │
+│   └── SHA256SUMS.txt                                                    │
+│                                                                          │
+│   Delivery options:                                                     │
+│   • GitHub Releases (private repo, customer gets access)                │
+│   • S3/R2 bucket with signed URLs                                       │
+│   • Customer portal with license-gated download                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 GitHub Actions Workflow
+
+```yaml
+# .github/workflows/build-release.yml
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: fb-poster-linux-x64
+            nuitka_args: --onefile
+          - os: macos-latest
+            artifact_name: fb-poster-macos-x64
+            nuitka_args: --onefile --macos-create-app-bundle
+          - os: windows-latest
+            artifact_name: fb-poster-windows-x64.exe
+            nuitka_args: --onefile --windows-icon-from-ico=assets/icon.ico
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install nuitka ordered-set zstandard
+      
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka \
+            ${{ matrix.nuitka_args }} \
+            --standalone \
+            --enable-plugin=anti-bloat \
+            --include-data-dir=templates=templates \
+            --include-data-files=config.example.yaml=config.example.yaml \
+            --output-filename=${{ matrix.artifact_name }} \
+            main.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+      
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum */* > SHA256SUMS.txt
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/**/*
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### 9.3 Version Update Flow
+
+```
+Developer releases v1.3.0 with new feature
+                │
+                ▼
+┌───────────────────────────────────────────────────────┐
+│ Option A: Manual Update                                │
+├───────────────────────────────────────────────────────┤
+│ • User receives email notification                     │
+│ • Downloads new binary from portal                     │
+│ • Replaces old binary, keeps config/data              │
+│ • Simple, no extra code needed                         │
+└───────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────┐
+│ Option B: Auto-Update Check (Recommended)              │
+├───────────────────────────────────────────────────────┤
+│ • App checks API on startup:                           │
+│   GET /api/v1/version → {"latest": "1.3.0"}           │
+│ • If current < latest, show notification:              │
+│   "Update available: v1.3.0. Download at..."          │
+│ • User downloads manually                              │
+│ • Optional: Self-updater downloads & replaces          │
+└───────────────────────────────────────────────────────┘
+```
+
+### 9.4 Build Requirements
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| Python | 3.10-3.11 | Runtime |
+| Nuitka | >= 2.0 | Compilation |
+| GCC/MinGW | Latest | C compiler (Windows) |
+| Xcode CLI | Latest | C compiler (macOS) |
+| ordered-set | >= 4.1 | Nuitka dependency |
+| zstandard | >= 0.22 | Compression |
+
+### 9.5 Build Scripts
+
+```bash
+# scripts/build.sh - Local build script
+
+#!/bin/bash
+set -e
+
+VERSION=$(git describe --tags --always)
+PLATFORM=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
+echo "Building fb-poster $VERSION for $PLATFORM-$ARCH..."
+
+# Clean previous builds
+rm -rf build/ dist/
+
+# Install build deps
+pip install nuitka ordered-set zstandard
+
+# Build binary
+python -m nuitka \
+  --standalone \
+  --onefile \
+  --enable-plugin=anti-bloat \
+  --include-data-dir=templates=templates \
+  --include-data-files=config.example.yaml=config.example.yaml \
+  --output-filename="fb-poster-$VERSION-$PLATFORM-$ARCH" \
+  main.py
+
+echo "Build complete: fb-poster-$VERSION-$PLATFORM-$ARCH"
+```
+
+### 9.6 Release Checklist
+
+Before creating a release tag:
+
+- [ ] All tests pass locally
+- [ ] Version number updated in code
+- [ ] Changelog updated
+- [ ] License validation tested
+- [ ] Build tested on all target platforms
+- [ ] Documentation updated for new features
+
+After release:
+
+- [ ] Verify GitHub Release created
+- [ ] Download and test each binary
+- [ ] Update download portal links
+- [ ] Email notification to customers (optional)
+- [ ] Monitor for bug reports
+
+---
+
+## 10. Success Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -379,7 +618,7 @@ fb-autoposter-v1.0.0/
 
 ---
 
-## 10. Risks & Mitigations
+## 11. Risks & Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
@@ -390,7 +629,7 @@ fb-autoposter-v1.0.0/
 
 ---
 
-## 11. Future Enhancements
+## 12. Future Enhancements
 
 1. **Hardware dongles** — USB-based licensing for enterprise
 2. **Team licenses** — Multiple users under one org

@@ -4,6 +4,26 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-28 12:52
+
+**Add CI/CD Build Pipeline to PRD and Implementation Plan**
+
+Added comprehensive GitHub Actions build pipeline documentation:
+- PRD Section 9: Build & Release Pipeline with architecture diagrams
+- GitHub Actions workflow example for multi-platform builds (Linux, macOS, Windows)
+- Version update flow (manual and auto-check options)
+- Local build script template
+- Release checklist
+- Implementation Plan Phase 5: Build & Release Pipeline with detailed tasks
+- Updated timeline to include new phase
+- Updated file list with new workflow files
+
+**Files changed:**
+- docs/license-system-prd.md
+- docs/plans/license-system-implementation.md
+
+---
+
 ## 2026-03-28 11:42
 
 **Create License System PRD and Implementation Plan**

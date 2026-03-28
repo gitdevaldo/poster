@@ -150,7 +150,46 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 
 ---
 
-## Phase 5: Code Protection
+## Phase 5: Build & Release Pipeline
+**Goal:** Automate binary builds and releases via GitHub Actions.
+
+### 5.1 Create GitHub Actions workflow
+- [ ] Create `.github/workflows/build-release.yml`
+- [ ] Configure matrix build for Linux, macOS, Windows
+- [ ] Set Python 3.11 as build environment
+- [ ] Install Nuitka and dependencies
+
+### 5.2 Configure Nuitka build
+- [ ] Standalone mode (no Python required)
+- [ ] Onefile output (single executable)
+- [ ] Include `templates/` directory
+- [ ] Include `config.example.yaml`
+- [ ] Platform-specific options:
+  - Windows: `--windows-icon-from-ico`
+  - macOS: `--macos-create-app-bundle`
+  - Linux: default
+
+### 5.3 Artifact management
+- [ ] Upload build artifacts from each platform
+- [ ] Generate SHA256 checksums
+- [ ] Attach to GitHub Release
+- [ ] Auto-generate release notes from commits
+
+### 5.4 Create local build script
+- [ ] `scripts/build.sh` for local testing
+- [ ] Version extraction from git tags
+- [ ] Platform detection
+- [ ] Clean build directory
+
+### 5.5 Version checking (optional)
+- [ ] Add `/api/v1/version` endpoint to license server
+- [ ] Client checks on startup
+- [ ] Display "Update available" notification
+- [ ] Link to download portal
+
+---
+
+## Phase 6: Code Protection
 **Goal:** Protect the distributed binary from reverse engineering.
 
 ### 5.1 Setup Nuitka compilation
@@ -181,7 +220,7 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 
 ---
 
-## Phase 6: Admin Dashboard
+## Phase 7: Admin Dashboard
 **Goal:** Manage licenses from a web interface.
 
 ### 6.1 Basic CRUD
@@ -202,7 +241,7 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 
 ---
 
-## Phase 7: Documentation & Launch
+## Phase 8: Documentation & Launch
 **Goal:** Prepare for public release.
 
 ### 7.1 User documentation
@@ -238,9 +277,10 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 | Phase 2: License server | 2-3 days | Phase 1 |
 | Phase 3: Payment integration | 1-2 days | Phase 2 |
 | Phase 4: Web UI | 1 day | Phase 1 |
-| Phase 5: Code protection | 1-2 days | Phase 1 |
-| Phase 6: Admin dashboard | 2-3 days | Phase 2 |
-| Phase 7: Docs & launch | 2-3 days | All |
+| Phase 5: Build pipeline | 1-2 days | Phase 1 |
+| Phase 6: Code protection | 1-2 days | Phase 5 |
+| Phase 7: Admin dashboard | 2-3 days | Phase 2 |
+| Phase 8: Docs & launch | 2-3 days | All |
 
 **Total:** ~2-3 weeks for MVP
 
@@ -252,12 +292,13 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 - [x] Phase 1: Client license module
 - [x] Phase 2: License server API (basic)
 - [x] Phase 3: Payment integration
-- [ ] Phase 5: Code protection (Nuitka only)
-- [ ] Phase 7: Basic docs + EULA
+- [ ] Phase 5: Build pipeline (GitHub Actions)
+- [ ] Phase 6: Code protection (Nuitka only)
+- [ ] Phase 8: Basic docs + EULA
 
 **Nice to have (post-launch):**
 - [ ] Phase 4: Web UI integration
-- [ ] Phase 6: Admin dashboard
+- [ ] Phase 7: Admin dashboard
 - [ ] PyArmor obfuscation
 - [ ] Anti-debugging
 
@@ -270,9 +311,10 @@ Implementation plan for the License System as defined in `docs/license-system-pr
 |------|---------|
 | `core/license.py` | License validation logic |
 | `license-server/` | Separate repo for API |
+| `.github/workflows/build-release.yml` | CI/CD build pipeline |
+| `scripts/build.sh` | Local build script |
 | `docs/installation.md` | User setup guide |
 | `docs/LICENSE.txt` | EULA |
-| `build.sh` | Nuitka build script |
 
 ### Modified Files
 | File | Changes |
