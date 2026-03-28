@@ -1574,7 +1574,6 @@ def _render_page() -> str:
       document.getElementById('templatePreviewTags').textContent = '—';
       document.getElementById('templatePreviewImages').textContent = '0';
       document.getElementById('templatePreviewText').textContent = 'No preview.';
-      fillTemplateEditor(null);
       return;
     }
 
@@ -1583,7 +1582,6 @@ def _render_page() -> str:
     document.getElementById('templatePreviewTags').textContent = (item.tags || []).length ? item.tags.join(', ') : '—';
     document.getElementById('templatePreviewImages').textContent = String((item.images || []).length);
     document.getElementById('templatePreviewText').textContent = item.text || '(Template has no text)';
-    fillTemplateEditor(item);
   }
 
   function renderTemplatePicker(data) {
