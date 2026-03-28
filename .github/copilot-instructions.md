@@ -2,6 +2,98 @@
 
 Facebook Group Auto-Poster: multi-account automation for posting to Facebook groups using Camoufox (anti-detection Firefox).
 
+---
+
+## ⛔ MANDATORY FIRST STEP — Read Before ANY Action
+
+> **STOP. Before writing ANY code, making ANY edit, or running ANY command, you MUST do these reads FIRST.**
+> This is not optional. Skipping this leads to incorrect approaches and wasted effort.
+> **This applies to EVERY user message — not just the first one in a session.**
+
+1. **Read `.github/lessons.md`** — Hard-won rules from past mistakes. Every principle is a blocking constraint.
+2. **Scan `.github/skills/`** — Identify which skill files match your current task and read their SKILL.md files.
+   - Committing code → `git-commit` + `conventional-commit`
+   - Writing a PRD → `prd`
+   - Refactoring → `refactor`
+   - Any task → check if a matching skill exists first
+3. **Re-evaluate at each to-do item** — Different steps may need different skills.
+
+**If you find yourself about to edit a file without having read lessons + relevant skills first, STOP and read them.**
+
+### ⛔ MANDATORY AFTER EVERY CHANGE — Commit + Push
+
+> **After EVERY change — code, docs, config, lessons, instructions, ANYTHING — you MUST immediately:**
+> 1. **Stage** — `git add -A`
+> 2. **Commit** — `git commit --no-verify` with a conventional commit message
+> 3. **Push** — `git push`
+>
+> **This applies to ALL files in the repo. A one-line docs edit gets committed and pushed immediately.**
+> **Do NOT wait for the user to remind you. This is automatic. No exceptions.**
+
+### ⛔ MANDATORY AFTER CODE CHANGES — Validate + Test
+
+> **After changes to Python code (NOT docs/config-only changes), you MUST also:**
+> 1. **Compile check** — `python -m compileall main.py core` to verify no syntax errors
+> 2. **Dry run** — `python main.py --run-once --dry-run` when relevant to verify logic
+>
+> **This is SEPARATE from commit+push. Both must happen. Validation verifies the code works. Commit+push saves it.**
+
+---
+
+## Agent Behaviour Rules
+
+### 1. No Lazy Fixes
+- Always find and fix root causes. Never apply temporary workarounds or band-aids.
+- When fixing a file, check all other files that import from or depend on the changed code. Trace the full impact.
+- Senior developer standards: would a staff engineer approve this change?
+
+### 2. Strict Type Safety
+- **All functions use Python type hints.** Use `from __future__ import annotations` at top of modules.
+- If a type mismatch exists, fix the type definition or the data flow — never use `# type: ignore` without justification.
+
+### 3. Generated Documents — Always in `/docs` at Project Root
+- **ALL generated markdown documents** (reports, deep dives, PRDs, implementation plans, audits, architecture docs) MUST be saved to the `/docs` folder at the project root, **NOT** scattered elsewhere.
+- Use descriptive filenames with date prefix when relevant: e.g., `docs/2026-03-06-scheduler-audit.md`.
+- Create the `/docs` folder if it doesn't exist.
+
+### 4. Workflow Orchestration
+
+**Plan Mode**: Enter plan mode for any non-trivial task (3+ steps or architectural decisions). Write plan to `.github/tasks/todo.md` with checkable items. If something goes sideways, STOP and re-plan immediately.
+
+**Subagent Strategy**: Use subagents liberally for research, exploration, and parallel analysis. One task per subagent. Keep main context window clean.
+
+**Self-Improvement Loop**: After ANY correction from the user, update `.github/lessons.md` with the pattern and a rule to prevent recurrence. Review lessons at session start.
+
+**Verification Before Done**: Never mark a task complete without proving it works. Run compile check, test with `--dry-run`, demonstrate correctness.
+
+**Demand Elegance (Balanced)**: For non-trivial changes, pause and consider if there's a more elegant approach. Skip for simple, obvious fixes — don't over-engineer.
+
+**Autonomous Bug Fixing**: When given a bug report, just fix it. Point at logs/errors/failing tests, then resolve. Zero hand-holding required from the user.
+
+### 5. Task Management
+
+1. Write plan to `.github/tasks/todo.md` with checkable items
+2. Mark items complete as you go
+3. High-level summary at each step
+4. Add review section to `.github/tasks/todo.md` when done
+5. Update `.github/lessons.md` after corrections
+
+### 6. Git Discipline
+
+- **Commit After Every Change**: After every change — even a single-line fix — immediately stage, commit, and push. No batching multiple unrelated changes. Keep the remote always up to date.
+- **Use Git Skills**: Before committing, read and follow the relevant Git skills in `.github/skills/` (e.g., `git-commit`, `conventional-commit`). Generate conventional commit messages with proper type, scope, and description.
+- **Never commit `data/` or `logs/`**: Session files and log files are machine-specific and in `.gitignore`.
+
+### 7. Core Principles
+
+- **Simplicity First**: Make every change as simple as possible. Minimal code impact.
+- **No Laziness**: Find root causes. No temporary fixes.
+- **Minimal Impact**: Changes touch only what's necessary. Avoid introducing bugs.
+- **Full Traceability**: When changing shared code in `core/`, verify all consumers still work.
+- **Config-Driven**: All runtime behavior comes from `config.yaml`. No hardcoded overrides.
+
+---
+
 ## Architecture
 
 ```
