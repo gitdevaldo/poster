@@ -4,6 +4,28 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 18:18
+
+**Polish preset UX text/buttons and replace native preset dialogs**
+
+Improved preset UX consistency and clarity:
+
+- Reworded unsaved dialog buttons:
+  - `Save to Preset` → `Save as Preset`
+  - `Save to Config` → `Continue (Config only)`
+  - `Discard` → `Cancel`
+- Added dedicated styled modal for preset actions (apply/disable/delete)
+  - Removed native window confirm for preset delete/apply flows
+- Preset selector now asks confirmation before apply/disable
+- Update/Delete button labels now show selected preset filename
+  - Example: `📝 Update (marketing-post.yaml)`
+- Clarified unsaved dialog behavior text and kept state logic predictable
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-29 18:13
 
 **Add full preset system (save/apply/update/delete) with sidebar UI**

@@ -1386,11 +1386,29 @@ def _render_page() -> str:
       <button id="closeUnsavedModal" type="button">✕ Close</button>
     </div>
     <div class="preview-box" style="margin-top:0">
-      <p style="margin:0 0 12px">You have unsaved changes. What do you want to do?</p>
+      <p style="margin:0 0 12px">You changed settings/groups but haven't saved them into a preset yet.</p>
       <div class="frow" style="justify-content:center;gap:10px">
-        <button id="saveUnsavedToPresetBtn" class="btn-primary" type="button">💾 Save to Preset</button>
-        <button id="saveUnsavedToConfigBtn" class="btn-yellow" type="button">📝 Save to Config</button>
-        <button id="discardUnsavedBtn" class="btn-red" type="button">🗑️ Discard</button>
+        <button id="saveUnsavedToPresetBtn" class="btn-primary" type="button">💾 Save as Preset</button>
+        <button id="saveUnsavedToConfigBtn" class="btn-yellow" type="button">➡ Continue (Config only)</button>
+        <button id="discardUnsavedBtn" class="btn-red" type="button">✖ Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="presetActionModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:460px">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-violet">📋</div>
+        <span id="presetActionTitle">Preset Action</span>
+      </div>
+      <button id="closePresetActionModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <p id="presetActionMessage" style="margin:0 0 12px">Confirm preset action?</p>
+      <div class="frow" style="justify-content:center;gap:10px">
+        <button id="confirmPresetActionBtn" class="btn-primary" type="button">Confirm</button>
       </div>
     </div>
   </div>
@@ -1415,6 +1433,8 @@ def _render_page() -> str:
   let suppressUnsavedMark = false;
   let pendingUnsavedAction = null;
   let runPendingAfterPresetSave = false;
+  let pendingPresetAction = null;
+  let lastPresetSelectionValue = '';
 
   function esc(v) {
     const d = document.createElement('div');
@@ -1448,6 +1468,19 @@ def _render_page() -> str:
   function showUnsavedModal(nextAction = null) {
     pendingUnsavedAction = nextAction;
     document.getElementById('unsavedChangesModal').classList.add('show');
+  }
+
+  function showPresetActionModal(title, message, onConfirm, confirmLabel = 'Confirm') {
+    pendingPresetAction = onConfirm;
+    document.getElementById('presetActionTitle').textContent = title;
+    document.getElementById('presetActionMessage').textContent = message;
+    document.getElementById('confirmPresetActionBtn').textContent = confirmLabel;
+    document.getElementById('presetActionModal').classList.add('show');
+  }
+
+  function closePresetActionModal() {
+    pendingPresetAction = null;
+    document.getElementById('presetActionModal').classList.remove('show');
   }
 
   async function runPendingUnsavedAction() {
@@ -1950,6 +1983,7 @@ def _render_page() -> str:
     } else {
       sel.value = '';
     }
+    lastPresetSelectionValue = sel.value;
 
     const info = document.getElementById('presetInfo');
     if (presetStatusSnapshot.enabled && presetStatusSnapshot.name) {
@@ -1961,8 +1995,17 @@ def _render_page() -> str:
       info.textContent = 'Using config.yaml';
     }
 
-    document.getElementById('updatePresetBtn').disabled = !sel.value;
-    document.getElementById('deletePresetBtn').disabled = !sel.value;
+    const updateBtn = document.getElementById('updatePresetBtn');
+    const deleteBtn = document.getElementById('deletePresetBtn');
+    updateBtn.disabled = !sel.value;
+    deleteBtn.disabled = !sel.value;
+    if (sel.value) {
+      updateBtn.textContent = `📝 Update (${sel.value})`;
+      deleteBtn.textContent = `🗑️ Delete (${sel.value})`;
+    } else {
+      updateBtn.textContent = '📝 Update';
+      deleteBtn.textContent = '🗑️ Delete';
+    }
   }
 
   async function loadState() {
@@ -2169,11 +2212,30 @@ def _render_page() -> str:
   });
   document.getElementById('presetSelect').addEventListener('change', async ev => {
     const filename = (ev.target.value || '').trim();
+    const revertSelection = () => {
+      ev.target.value = lastPresetSelectionValue;
+    };
     if (!filename) {
-      await callAction('disable_preset', selectedAccount || '');
+      showPresetActionModal(
+        'Disable Preset',
+        'Switch to config.yaml values only?',
+        async () => {
+          await callAction('disable_preset', selectedAccount || '');
+        },
+        'Use Config'
+      );
+      revertSelection();
       return;
     }
-    await callAction('apply_preset', selectedAccount || '', '', '', { preset_filename: filename });
+    showPresetActionModal(
+      'Apply Preset',
+      `Apply preset "${filename}" now?`,
+      async () => {
+        await callAction('apply_preset', selectedAccount || '', '', '', { preset_filename: filename });
+      },
+      'Apply'
+    );
+    revertSelection();
   });
   document.getElementById('saveNewPresetBtn').addEventListener('click', () => {
     runPendingAfterPresetSave = false;
@@ -2194,8 +2256,14 @@ def _render_page() -> str:
       toast('Select a preset first.', true);
       return;
     }
-    if (!confirm(`Delete preset "${filename}"? This cannot be undone.`)) return;
-    await callAction('delete_preset', selectedAccount || '', '', '', { preset_filename: filename });
+    showPresetActionModal(
+      'Delete Preset',
+      `Delete preset "${filename}"? This cannot be undone.`,
+      async () => {
+        await callAction('delete_preset', selectedAccount || '', '', '', { preset_filename: filename });
+      },
+      'Delete'
+    );
   });
   document.getElementById('closePresetSaveModal').addEventListener('click', () => {
     runPendingAfterPresetSave = false;
@@ -2237,23 +2305,32 @@ def _render_page() -> str:
     }
   });
   document.getElementById('saveUnsavedToPresetBtn').addEventListener('click', () => {
-    document.getElementById('unsavedChangesModal').classList.remove('show');
     runPendingAfterPresetSave = true;
+    document.getElementById('unsavedChangesModal').classList.remove('show');
     document.getElementById('saveNewPresetBtn').click();
   });
   document.getElementById('saveUnsavedToConfigBtn').addEventListener('click', async () => {
     // Current edits are already written to config through rule/group/account actions.
-    // We only clear the warning state here.
+    // This path just proceeds without creating/updating a preset.
     clearUnsaved();
     document.getElementById('unsavedChangesModal').classList.remove('show');
-    toast('Current changes kept in config.');
+    toast('Proceeding with current config values.');
     await runPendingUnsavedAction();
   });
   document.getElementById('discardUnsavedBtn').addEventListener('click', async () => {
-    clearUnsaved();
+    // Keep unsaved flag because this action means "cancel moving forward".
     document.getElementById('unsavedChangesModal').classList.remove('show');
-    await runPendingUnsavedAction();
-    await loadState();
+    pendingUnsavedAction = null;
+    runPendingAfterPresetSave = false;
+  });
+  document.getElementById('closePresetActionModal').addEventListener('click', closePresetActionModal);
+  document.getElementById('presetActionModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'presetActionModal') closePresetActionModal();
+  });
+  document.getElementById('confirmPresetActionBtn').addEventListener('click', async () => {
+    const fn = pendingPresetAction;
+    closePresetActionModal();
+    if (typeof fn === 'function') await fn();
   });
   document.getElementById('openBrowserRulesBtn').addEventListener('click', openBrowserRulesModal);
   document.getElementById('openGroupsRulesBtn').addEventListener('click', openGroupsRulesModal);
@@ -2351,7 +2428,7 @@ def _render_page() -> str:
   window.addEventListener('beforeunload', ev => {
     if (!hasUnsavedChanges) return;
     ev.preventDefault();
-    ev.returnValue = '';
+    ev.returnValue = 'You have unsaved preset changes.';
   });
 
   initLogAutoScrollSetting();
