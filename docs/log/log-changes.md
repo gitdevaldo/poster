@@ -4,6 +4,39 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 18:44
+
+**Implement Web UI posting scheduler (one-time/daily/weekly/specific datetime)**
+
+Completed scheduler feature in Web UI with per-account persistence and runtime control:
+
+- Added scheduler modes:
+  - `one_time` (next occurrence at HH:MM)
+  - `daily` (HH:MM)
+  - `weekly` (selected weekdays + HH:MM)
+  - `specific_datetime` (single date/time run)
+- Added timezone-aware normalization and next-run computation using `zoneinfo`.
+- Persisted schedule under each account in `config.yaml` (`accounts.<id>.schedule`).
+- Added scheduler runtime state in Web UI backend:
+  - start/stop schedule actions
+  - waiting/executing/stopping/completed/error states
+  - next/last run metadata and last result
+- Added Scheduler UI controls and wiring:
+  - type/time/timezone/day selection/specific datetime
+  - run mode (live/dry run)
+  - Start Schedule / Stop Schedule buttons
+  - status line with next/last run and account context
+- Fixed scheduler-runner lock safety by using re-entrant locking and avoiding deadlock paths.
+- Added saved-schedule prefill behavior so schedule settings are restored per account.
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-29 18:18
 
 **Polish preset UX text/buttons and replace native preset dialogs**
