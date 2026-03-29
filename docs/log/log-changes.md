@@ -4,6 +4,48 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 18:13
+
+**Add full preset system (save/apply/update/delete) with sidebar UI**
+
+Implemented full-config preset feature with YAML storage in `templates/presets/` and Web UI controls at the top of the left sidebar.
+
+What was added:
+- New `core/preset_manager.py` for preset CRUD and apply logic
+- Preset-aware config loading in `core/config_loader.py`
+- New `presets` section in `config.yaml` (`enabled`, `name`)
+- Sidebar Presets card (above Accounts) with:
+  - Preset dropdown
+  - Save New / Update / Delete buttons
+  - Active preset info
+  - Unsaved changes badge
+- Modal dialogs (not native window dialogs):
+  - Save Preset modal
+  - Unsaved Changes modal with actions:
+    - Save to Preset
+    - Save to Config
+    - Discard
+- Preset actions wired through `/api/action`:
+  - `save_preset`, `update_preset`, `delete_preset`, `apply_preset`, `disable_preset`
+- Preset now includes account + browser/groups/posting rules + group include/exclude state (`groups_state`)
+
+Behavior details:
+- Selecting a preset applies it and enables `presets.enabled: true`.
+- Selecting “None (Use Config)” disables preset mode.
+- Saving/updating a preset also applies it immediately.
+- Unsaved dialog appears before running setup/scrape/run actions when changes exist.
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+- Preset manager smoke test passed (save/list/apply/disable flow).
+
+**Files changed:**
+- core/preset_manager.py (created)
+- core/config_loader.py
+- core/web_ui.py
+- config.yaml
+- templates/presets/.gitkeep
+
 ## 2026-03-28 13:28
 
 **Add posting progress indicator (Post X/X) to header**

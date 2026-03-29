@@ -3,6 +3,9 @@ session:
   persistent_profile_dir: data/camoufox_profile
   apply_cookie_overlay: false
   auto_relogin: true
+presets:
+  enabled: false
+  name: ''
 active_account: account-1
 groups:
   source: data/groups.json

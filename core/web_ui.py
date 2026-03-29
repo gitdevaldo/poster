@@ -25,10 +25,20 @@ from core.account_manager import (
     set_active_account,
     set_group_included,
 )
-from core.config_loader import ACCOUNT_ENV_VAR
+from core.config_loader import ACCOUNT_ENV_VAR, load_config
 from core.group_scraper import scrape_groups
 from core.logger import get_log_file
 from core.post_queue import load_templates
+from core.preset_manager import (
+    list_presets,
+    load_preset,
+    save_preset,
+    delete_preset,
+    get_current_state,
+    apply_preset_values,
+    disable_preset,
+    get_preset_status,
+)
 from core.scheduler import run_scheduler
 from core.session_manager import ensure_session, validate_session
 
@@ -167,11 +177,17 @@ def _build_state(
   selected_account: str | None = None,
   runner_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    config = load_raw_config(config_path)
     accounts = list_accounts(config_path)
     active = get_active_account(config_path) or ""
-    account_id = selected_account or active or (next(iter(accounts.keys()), ""))
+    preset_status = get_preset_status(config_path)
+    preset_details = preset_status.get("details") if isinstance(preset_status.get("details"), dict) else {}
+    preset_account = str(preset_details.get("account", "")).strip() if isinstance(preset_details, dict) else ""
+    if bool(preset_status.get("enabled")) and preset_account:
+        account_id = preset_account
+    else:
+        account_id = selected_account or active or (next(iter(accounts.keys()), ""))
     groups = list_groups_for_account(config_path, account_id) if account_id else []
+    effective_cfg = load_config(config_path, account_id or None)
 
     account_items: list[dict[str, Any]] = []
     for aid, override in accounts.items():
@@ -191,12 +207,7 @@ def _build_state(
             "included": bool(g.get("active", True)),
         })
 
-    posting_cfg = dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {}
-    account_override = accounts.get(account_id, {}) if account_id else {}
-    if isinstance(account_override, dict):
-        account_posting = account_override.get("posting", {})
-        if isinstance(account_posting, dict):
-            posting_cfg.update(account_posting)
+    posting_cfg = dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {}
 
     templates: list[dict[str, Any]] = []
     for tpl in load_templates(Path("templates")):
@@ -225,15 +236,17 @@ def _build_state(
             "images": image_items,
         })
 
+    presets_list = list_presets()
+
     return {
         "active_account": active,
         "selected_account": account_id,
         "accounts": account_items,
         "groups": group_items,
         "posting": posting_cfg,
-      "global_groups": dict(config.get("groups", {})) if isinstance(config.get("groups"), dict) else {},
-      "global_posting": dict(config.get("posting", {})) if isinstance(config.get("posting"), dict) else {},
-        "browser": dict(config.get("browser", {})) if isinstance(config.get("browser"), dict) else {},
+      "global_groups": dict(effective_cfg.get("groups", {})) if isinstance(effective_cfg.get("groups"), dict) else {},
+      "global_posting": dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {},
+        "browser": dict(effective_cfg.get("browser", {})) if isinstance(effective_cfg.get("browser"), dict) else {},
         "templates": templates,
       "run_control": runner_state or {
         "is_active": False,
@@ -243,6 +256,8 @@ def _build_state(
         "is_selected_account": False,
         "message": "",
       },
+      "preset": preset_status,
+      "presets": presets_list,
     }
 
 
@@ -934,8 +949,30 @@ def _render_page() -> str:
 
   <div class="main-grid">
 
-    <!-- Accounts -->
+    <!-- Presets + Accounts -->
     <aside>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="t-icon ti-yellow">📋</div>
+            Presets
+          </div>
+          <span id="presetUnsavedBadge" class="pill p-orange" style="display:none">Unsaved changes</span>
+        </div>
+
+        <div class="frow">
+          <select id="presetSelect" style="flex:1;min-width:0"></select>
+        </div>
+
+        <div class="frow">
+          <button id="saveNewPresetBtn" class="btn-primary" type="button">💾 Save New</button>
+          <button id="updatePresetBtn" class="btn-yellow" type="button">📝 Update</button>
+          <button id="deletePresetBtn" class="btn-red" type="button">🗑️ Delete</button>
+        </div>
+
+        <div id="presetInfo" class="mono" style="margin-top:8px">Using config.yaml</div>
+      </div>
+
       <div class="card">
         <div class="card-title" style="justify-content:space-between">
           <div style="display:flex;align-items:center;gap:8px">
@@ -1318,6 +1355,47 @@ def _render_page() -> str:
   </div>
 </div>
 
+<div id="presetSaveModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:420px">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-yellow">💾</div>
+        <span>Save Preset</span>
+      </div>
+      <button id="closePresetSaveModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <div class="field">
+        <label class="mini-lbl" for="presetNameInput">Preset Name</label>
+        <input id="presetNameInput" type="text" placeholder="marketing-post">
+      </div>
+      <div class="frow" style="margin-top:12px">
+        <button id="confirmSavePresetBtn" class="btn-primary" type="button">💾 Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="unsavedChangesModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:460px">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-yellow">⚠️</div>
+        <span>Unsaved Changes</span>
+      </div>
+      <button id="closeUnsavedModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <p style="margin:0 0 12px">You have unsaved changes. What do you want to do?</p>
+      <div class="frow" style="justify-content:center;gap:10px">
+        <button id="saveUnsavedToPresetBtn" class="btn-primary" type="button">💾 Save to Preset</button>
+        <button id="saveUnsavedToConfigBtn" class="btn-yellow" type="button">📝 Save to Config</button>
+        <button id="discardUnsavedBtn" class="btn-red" type="button">🗑️ Discard</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   let selectedAccount = '';
   let isBusy = false;
@@ -1331,6 +1409,12 @@ def _render_page() -> str:
   let templateEditorMode = 'edit';
   let groupPage = 1;
   let toastTimer = null;
+  let presetsSnapshot = [];
+  let presetStatusSnapshot = { enabled: false, name: '' };
+  let hasUnsavedChanges = false;
+  let suppressUnsavedMark = false;
+  let pendingUnsavedAction = null;
+  let runPendingAfterPresetSave = false;
 
   function esc(v) {
     const d = document.createElement('div');
@@ -1348,6 +1432,32 @@ def _render_page() -> str:
 
   function setUpdated() {
     document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+  }
+
+  function markUnsaved() {
+    if (suppressUnsavedMark) return;
+    hasUnsavedChanges = true;
+    document.getElementById('presetUnsavedBadge').style.display = 'inline-block';
+  }
+
+  function clearUnsaved() {
+    hasUnsavedChanges = false;
+    document.getElementById('presetUnsavedBadge').style.display = 'none';
+  }
+
+  function showUnsavedModal(nextAction = null) {
+    pendingUnsavedAction = nextAction;
+    document.getElementById('unsavedChangesModal').classList.add('show');
+  }
+
+  async function runPendingUnsavedAction() {
+    if (typeof pendingUnsavedAction !== 'function') {
+      pendingUnsavedAction = null;
+      return;
+    }
+    const fn = pendingUnsavedAction;
+    pendingUnsavedAction = null;
+    await fn();
   }
 
   function setBusy(b) {
@@ -1515,6 +1625,30 @@ def _render_page() -> str:
       });
       const data = await res.json();
       data.ok ? toast(data.message || 'Done!') : toast(data.error || 'Failed.', true);
+      if (data.ok) {
+        const dirtyActions = new Set([
+          'add_account',
+          'delete_account',
+          'enable_account',
+          'disable_account',
+          'set_active',
+          'include_group',
+          'exclude_group',
+          'set_template',
+          'update_browser_rules',
+          'update_groups_rules',
+          'update_posting_rules',
+        ]);
+        const cleanActions = new Set([
+          'save_preset',
+          'update_preset',
+          'apply_preset',
+          'disable_preset',
+          'delete_preset',
+        ]);
+        if (dirtyActions.has(action)) markUnsaved();
+        if (cleanActions.has(action)) clearUnsaved();
+      }
       return data;
     } catch (e) {
       toast(String(e), true);
@@ -1692,7 +1826,7 @@ def _render_page() -> str:
         : `<span class="pill p-orange">● Off</span>`;
       const btns = [
         `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')">🧩</button>`,
-        `<button class="sm-btn btn-yellow" type="button" onclick="callAction('set_active','${esc(a.id)}')">⚡</button>`,
+        `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')">⚡</button>`,
         a.enabled
           ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')">⏸</button>`
           : `<button class="sm-btn btn-green" type="button" onclick="callAction('enable_account','${esc(a.id)}')">▶</button>`,
@@ -1760,7 +1894,7 @@ def _render_page() -> str:
         <td><span class="pill ${inc ? 'p-green' : 'p-orange'}">${inc ? '✓ In' : '✕ Out'}</span></td>
         <td>
           <button class="sm-btn ${inc ? 'btn-red' : 'btn-green'}" type="button"
-            onclick="callAction('${inc ? 'exclude' : 'include'}_group','${esc(selectedAccount)}','${esc(g.id)}')">
+            onclick="toggleGroupInclude('${inc ? 'exclude' : 'include'}_group','${esc(g.id)}')">
             ${inc ? 'Exclude' : 'Include'}
           </button>
         </td>
@@ -1801,6 +1935,36 @@ def _render_page() -> str:
     holder.innerHTML = buttons.join('');
   }
 
+  function renderPresets(data) {
+    presetsSnapshot = data.presets || [];
+    presetStatusSnapshot = data.preset || { enabled: false, name: '' };
+    const sel = document.getElementById('presetSelect');
+
+    const options = [
+      '<option value="">None (Use Config)</option>',
+      ...presetsSnapshot.map(p => `<option value="${esc(p.filename)}">${esc(p.name || p.filename)}</option>`)
+    ];
+    sel.innerHTML = options.join('');
+    if (presetStatusSnapshot.enabled && presetStatusSnapshot.name) {
+      sel.value = presetStatusSnapshot.name;
+    } else {
+      sel.value = '';
+    }
+
+    const info = document.getElementById('presetInfo');
+    if (presetStatusSnapshot.enabled && presetStatusSnapshot.name) {
+      const pretty = (presetStatusSnapshot.details && presetStatusSnapshot.details.name)
+        ? presetStatusSnapshot.details.name
+        : presetStatusSnapshot.name;
+      info.textContent = `Active: ${pretty} (${presetStatusSnapshot.name})`;
+    } else {
+      info.textContent = 'Using config.yaml';
+    }
+
+    document.getElementById('updatePresetBtn').disabled = !sel.value;
+    document.getElementById('deletePresetBtn').disabled = !sel.value;
+  }
+
   async function loadState() {
     const q = selectedAccount ? `?account=${encodeURIComponent(selectedAccount)}` : '';
     try {
@@ -1814,9 +1978,12 @@ def _render_page() -> str:
       renderTemplatePicker(data);
       document.getElementById('selectedTitle').textContent =
         selectedAccount ? `Actions — ${selectedAccount}` : 'Select an account';
+      suppressUnsavedMark = true;
+      renderPresets(data);
       renderQuickActions(data);
       renderAccounts(data);
       renderGroups({ groups: groupsSnapshot });
+      suppressUnsavedMark = false;
       setUpdated();
     } catch {
       document.getElementById('lastUpdated').textContent = 'Error';
@@ -1827,6 +1994,14 @@ def _render_page() -> str:
     selectedAccount = id;
     resetGroupPaging();
     loadState();
+  }
+
+  async function setActiveAccountFromList(id) {
+    await callAction('set_active', id);
+  }
+
+  async function toggleGroupInclude(action, groupId) {
+    await callAction(action, selectedAccount, groupId);
   }
 
   document.getElementById('addAccountBtn').addEventListener('click', async () => {
@@ -1843,6 +2018,19 @@ def _render_page() -> str:
     if (!selectedAccount) { toast('Please select an account first.', true); return; }
     
     const action = btn.dataset.action;
+
+    // Ask to save/discard unsaved edits before running actions.
+    const safeActions = new Set(['test_session', 'setup_session', 'scrape_groups', 'run_once_dry', 'run_once_live']);
+    if (hasUnsavedChanges && safeActions.has(action)) {
+      showUnsavedModal(async () => {
+        if (action === 'run_once_live') {
+          document.getElementById('runLiveModal').classList.add('show');
+          return;
+        }
+        await callAction(action, selectedAccount);
+      });
+      return;
+    }
     
     // Special handling for run_once_live - show modal to ask about resetting posted log
     if (action === 'run_once_live') {
@@ -1979,6 +2167,94 @@ def _render_page() -> str:
     groupPage += 1;
     renderGroups({ groups: groupsSnapshot });
   });
+  document.getElementById('presetSelect').addEventListener('change', async ev => {
+    const filename = (ev.target.value || '').trim();
+    if (!filename) {
+      await callAction('disable_preset', selectedAccount || '');
+      return;
+    }
+    await callAction('apply_preset', selectedAccount || '', '', '', { preset_filename: filename });
+  });
+  document.getElementById('saveNewPresetBtn').addEventListener('click', () => {
+    runPendingAfterPresetSave = false;
+    document.getElementById('presetNameInput').value = '';
+    document.getElementById('presetSaveModal').classList.add('show');
+  });
+  document.getElementById('updatePresetBtn').addEventListener('click', async () => {
+    const filename = (document.getElementById('presetSelect').value || '').trim();
+    if (!filename) {
+      toast('Select a preset first.', true);
+      return;
+    }
+    await callAction('update_preset', selectedAccount || '', '', '', { preset_filename: filename });
+  });
+  document.getElementById('deletePresetBtn').addEventListener('click', async () => {
+    const filename = (document.getElementById('presetSelect').value || '').trim();
+    if (!filename) {
+      toast('Select a preset first.', true);
+      return;
+    }
+    if (!confirm(`Delete preset "${filename}"? This cannot be undone.`)) return;
+    await callAction('delete_preset', selectedAccount || '', '', '', { preset_filename: filename });
+  });
+  document.getElementById('closePresetSaveModal').addEventListener('click', () => {
+    runPendingAfterPresetSave = false;
+    document.getElementById('presetSaveModal').classList.remove('show');
+  });
+  document.getElementById('presetSaveModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'presetSaveModal') {
+      runPendingAfterPresetSave = false;
+      document.getElementById('presetSaveModal').classList.remove('show');
+    }
+  });
+  document.getElementById('confirmSavePresetBtn').addEventListener('click', async () => {
+    const name = (document.getElementById('presetNameInput').value || '').trim();
+    if (!name) {
+      toast('Preset name is required.', true);
+      return;
+    }
+    const result = await callAction('save_preset', selectedAccount || '', '', '', { preset_name: name });
+    if (result && result.ok) {
+      document.getElementById('presetSaveModal').classList.remove('show');
+      if (runPendingAfterPresetSave) {
+        runPendingAfterPresetSave = false;
+        await runPendingUnsavedAction();
+      } else {
+        await loadState();
+      }
+    }
+  });
+  document.getElementById('closeUnsavedModal').addEventListener('click', () => {
+    pendingUnsavedAction = null;
+    runPendingAfterPresetSave = false;
+    document.getElementById('unsavedChangesModal').classList.remove('show');
+  });
+  document.getElementById('unsavedChangesModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'unsavedChangesModal') {
+      pendingUnsavedAction = null;
+      runPendingAfterPresetSave = false;
+      document.getElementById('unsavedChangesModal').classList.remove('show');
+    }
+  });
+  document.getElementById('saveUnsavedToPresetBtn').addEventListener('click', () => {
+    document.getElementById('unsavedChangesModal').classList.remove('show');
+    runPendingAfterPresetSave = true;
+    document.getElementById('saveNewPresetBtn').click();
+  });
+  document.getElementById('saveUnsavedToConfigBtn').addEventListener('click', async () => {
+    // Current edits are already written to config through rule/group/account actions.
+    // We only clear the warning state here.
+    clearUnsaved();
+    document.getElementById('unsavedChangesModal').classList.remove('show');
+    toast('Current changes kept in config.');
+    await runPendingUnsavedAction();
+  });
+  document.getElementById('discardUnsavedBtn').addEventListener('click', async () => {
+    clearUnsaved();
+    document.getElementById('unsavedChangesModal').classList.remove('show');
+    await runPendingUnsavedAction();
+    await loadState();
+  });
   document.getElementById('openBrowserRulesBtn').addEventListener('click', openBrowserRulesModal);
   document.getElementById('openGroupsRulesBtn').addEventListener('click', openGroupsRulesModal);
   document.getElementById('openPostingRulesBtn').addEventListener('click', openPostingRulesModal);
@@ -2017,7 +2293,9 @@ def _render_page() -> str:
     }
 
     const result = await callAction('update_browser_rules', selectedAccount || '', '', '', {}, payload);
-    if (result && result.ok) closeBrowserRulesModal();
+    if (result && result.ok) {
+      closeBrowserRulesModal();
+    }
   });
   document.getElementById('saveGroupsRulesBtn').addEventListener('click', async () => {
     const payload = {
@@ -2030,7 +2308,9 @@ def _render_page() -> str:
       return;
     }
     const result = await callAction('update_groups_rules', selectedAccount || '', '', '', {}, {}, payload, {});
-    if (result && result.ok) closeGroupsRulesModal();
+    if (result && result.ok) {
+      closeGroupsRulesModal();
+    }
   });
   document.getElementById('savePostingRulesBtn').addEventListener('click', async () => {
     const payload = {
@@ -2056,7 +2336,9 @@ def _render_page() -> str:
       return;
     }
     const result = await callAction('update_posting_rules', selectedAccount || '', '', '', {}, {}, {}, payload);
-    if (result && result.ok) closePostingRulesModal();
+    if (result && result.ok) {
+      closePostingRulesModal();
+    }
   });
   document.getElementById('accountSelect').addEventListener('change', ev => {
     const v = (ev.target.value || '').trim();
@@ -2064,6 +2346,12 @@ def _render_page() -> str:
       resetGroupPaging();
       selectAccount(v);
     }
+  });
+
+  window.addEventListener('beforeunload', ev => {
+    if (!hasUnsavedChanges) return;
+    ev.preventDefault();
+    ev.returnValue = '';
   });
 
   initLogAutoScrollSetting();
@@ -2141,6 +2429,61 @@ def _execute_account_action(
       return _update_groups_rules(config_path, groups_rules or {})
     if action == "update_posting_rules":
       return _update_posting_rules(config_path, posting_rules or {})
+
+    # Preset actions
+    if action == "list_presets":
+      presets = list_presets()
+      status = get_preset_status(config_path)
+      return True, json.dumps({"presets": presets, "status": status})
+    if action == "save_preset":
+      preset_name = str(template_data.get("preset_name", "")).strip() if template_data else ""
+      if not preset_name:
+        return False, "Preset name is required."
+      current_state = get_current_state(config_path, account_id)
+      current_state["name"] = preset_name
+      ok, normalized = save_preset(preset_name, current_state, update=False)
+      if not ok:
+        return False, f"Failed to save preset: {normalized}"
+      if apply_preset_values(config_path, normalized):
+        return True, f"Preset '{preset_name}' saved and applied."
+      return True, f"Preset '{preset_name}' saved."
+    if action == "update_preset":
+      preset_filename = str(template_data.get("preset_filename", "")).strip() if template_data else ""
+      if not preset_filename:
+        return False, "Preset filename is required."
+      existing = load_preset(preset_filename)
+      if not existing:
+        return False, f"Preset '{preset_filename}' not found."
+      current_state = get_current_state(config_path, account_id)
+      current_state["name"] = existing.get("name", preset_filename.replace(".yaml", ""))
+      ok, normalized = save_preset(preset_filename, current_state, update=True)
+      if not ok:
+        return False, f"Failed to update preset: {normalized}"
+      if apply_preset_values(config_path, normalized):
+        return True, f"Preset '{normalized}' updated and applied."
+      return True, f"Preset '{normalized}' updated."
+    if action == "delete_preset":
+      preset_filename = str(template_data.get("preset_filename", "")).strip() if template_data else ""
+      if not preset_filename:
+        return False, "Preset filename is required."
+      if delete_preset(preset_filename):
+        # If this was the active preset, disable preset mode
+        status = get_preset_status(config_path)
+        if status.get("name") == preset_filename:
+          disable_preset(config_path)
+        return True, f"Preset '{preset_filename}' deleted."
+      return False, f"Failed to delete preset '{preset_filename}'."
+    if action == "apply_preset":
+      preset_filename = str(template_data.get("preset_filename", "")).strip() if template_data else ""
+      if not preset_filename:
+        return False, "Preset filename is required."
+      if apply_preset_values(config_path, preset_filename):
+        return True, f"Preset '{preset_filename}' applied."
+      return False, f"Failed to apply preset '{preset_filename}'."
+    if action == "disable_preset":
+      if disable_preset(config_path):
+        return True, "Preset disabled. Using config.yaml values."
+      return False, "Failed to disable preset."
 
     with _account_env(account_id):
         if action == "clear_posted_log":
@@ -2239,7 +2582,7 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                 if not isinstance(posting_rules, dict):
                   posting_rules = {}
 
-                global_actions = {"update_browser_rules", "update_groups_rules", "update_posting_rules"}
+                global_actions = {"update_browser_rules", "update_groups_rules", "update_posting_rules", "list_presets", "save_preset", "update_preset", "delete_preset", "apply_preset", "disable_preset"}
                 if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
                     return
