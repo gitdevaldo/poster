@@ -4,6 +4,26 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 19:46
+
+**Fix schedule ID persistence and clarify saved-record behavior**
+
+Resolved unstable schedule ID behavior:
+
+- Root cause: schedule records were normalized in memory but not always persisted immediately to `config.yaml`, causing IDs to appear to change across refreshes in some flows.
+- Fix: schedule normalization/migration now writes back to config on read paths when needed.
+  - Legacy `account.schedule` is migrated to `account.schedules`.
+  - Normalized schedule fields (including stable `id`) are persisted.
+- Result: schedule IDs remain stable once saved, and records are truly persisted in YAML.
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-29 19:35
 
 **Refactor scheduler to persisted multi-record queue + inline preset controls**

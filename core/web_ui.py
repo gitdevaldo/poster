@@ -327,11 +327,23 @@ def _get_account_schedules(config_path: Path, account_id: str | None) -> list[di
         return []
     records = _extract_account_schedules(account)
     normalized: list[dict[str, Any]] = []
+    changed = "schedule" in account or not isinstance(account.get("schedules"), list)
     for item in records:
         if not isinstance(item, dict):
+            changed = True
             continue
         timezone_name = str(item.get("timezone", "")).strip() or "UTC"
-        normalized.append(_ensure_schedule_record_defaults(item, default_timezone=timezone_name, touch=False))
+        normalized_item = _ensure_schedule_record_defaults(item, default_timezone=timezone_name, touch=False)
+        if normalized_item != item:
+            changed = True
+        normalized.append(normalized_item)
+    if changed:
+        account["schedules"] = [dict(item) for item in normalized]
+        if "schedule" in account:
+            del account["schedule"]
+        accounts[account_id] = account
+        config["accounts"] = accounts
+        save_raw_config(config_path, config)
     return normalized
 
 
@@ -355,15 +367,25 @@ def _get_next_due_schedule(config_path: Path) -> tuple[str, dict[str, Any], date
         return None
 
     best: tuple[str, dict[str, Any], datetime] | None = None
+    config_changed = False
     for account_id, account in accounts.items():
         if not isinstance(account, dict):
             continue
-        for item in _extract_account_schedules(account):
+        records = _extract_account_schedules(account)
+        normalized_records: list[dict[str, Any]] = []
+        account_changed = "schedule" in account or not isinstance(account.get("schedules"), list)
+        for item in records:
+            if not isinstance(item, dict):
+                account_changed = True
+                continue
             record = _ensure_schedule_record_defaults(
                 item,
                 default_timezone=str(item.get("timezone", "")).strip() or "UTC",
                 touch=False,
             )
+            if record != item:
+                account_changed = True
+            normalized_records.append(record)
             if not bool(record.get("enabled", True)):
                 continue
             next_run = _compute_next_run_utc(record)
@@ -371,6 +393,15 @@ def _get_next_due_schedule(config_path: Path) -> tuple[str, dict[str, Any], date
                 continue
             if best is None or next_run < best[2]:
                 best = (str(account_id), record, next_run)
+        if account_changed:
+            account["schedules"] = [dict(item) for item in normalized_records]
+            if "schedule" in account:
+                del account["schedule"]
+            accounts[account_id] = account
+            config_changed = True
+    if config_changed:
+        config["accounts"] = accounts
+        save_raw_config(config_path, config)
     return best
 
 
