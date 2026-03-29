@@ -4,6 +4,35 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 19:35
+
+**Refactor scheduler to persisted multi-record queue + inline preset controls**
+
+Addressed scheduler UX/data model issues and preset row alignment:
+
+- Preset row layout changed to inline compact control:
+  - dropdown is no longer full width
+  - dropdown + action buttons render on one line
+- Scheduler model changed from single in-memory slot to persisted records per account:
+  - schedules saved under `accounts.<id>.schedules` (list)
+  - supports multiple saved schedules per account
+  - one-time/specific schedules are stored as fixed `run_at`
+  - recurring schedules keep periodic rules
+- Added scheduler records UI list:
+  - shows id/type/next run/last run/mode/status
+  - allows stopping individual schedules
+  - Stop All disables all enabled schedules for selected account
+- Added background scheduler loop that reads persisted schedules and executes due jobs.
+- Migrates legacy single `account.schedule` to new list model automatically on read/save.
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-29 19:20
 
 **Shorten preset action buttons and add tooltips**

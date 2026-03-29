@@ -121,6 +121,11 @@ def _normalize_schedule_rules(
         if not ok or parsed_time is None:
             return False, err, {}
         normalized["time"] = parsed_time.strftime("%H:%M")
+        if schedule_type == "one_time":
+            run_at_local = _compute_one_time_run_at_local_iso(normalized["time"], timezone_name)
+            if not run_at_local:
+                return False, "Failed to compute one-time schedule time.", {}
+            normalized["run_at"] = run_at_local
 
     if schedule_type == "weekly":
         weekdays = _normalize_weekdays(schedule_rules.get("weekdays", []))
@@ -140,7 +145,9 @@ def _normalize_schedule_rules(
             local_dt = local_dt.replace(tzinfo=tz)
         else:
             local_dt = local_dt.astimezone(tz)
-        normalized["specific_datetime"] = local_dt.replace(second=0, microsecond=0).isoformat()
+        local_iso = local_dt.replace(second=0, microsecond=0).isoformat()
+        normalized["specific_datetime"] = local_iso
+        normalized["run_at"] = local_iso
 
     return True, "", normalized
 
@@ -155,8 +162,12 @@ def _compute_next_run_utc(spec: dict[str, Any], now_utc: datetime | None = None)
     now_utc = now_utc or datetime.now(timezone.utc)
     now_local = now_utc.astimezone(tz)
 
-    if schedule_type == "specific_datetime":
-        raw = str(spec.get("specific_datetime", "")).strip()
+    if schedule_type in {"one_time", "specific_datetime"}:
+        raw = str(spec.get("run_at", "")).strip()
+        if not raw and schedule_type == "specific_datetime":
+            raw = str(spec.get("specific_datetime", "")).strip()
+        if not raw and schedule_type == "one_time":
+            raw = str(spec.get("specific_datetime", "")).strip()
         if not raw:
             return None
         try:
@@ -176,7 +187,7 @@ def _compute_next_run_utc(spec: dict[str, Any], now_utc: datetime | None = None)
     if not ok or run_time is None:
         return None
 
-    if schedule_type in {"one_time", "daily"}:
+    if schedule_type == "daily":
         candidate_local = datetime.combine(now_local.date(), run_time, tzinfo=tz)
         if candidate_local <= now_local:
             candidate_local = candidate_local + timedelta(days=1)
@@ -202,7 +213,89 @@ def _compute_next_run_utc(spec: dict[str, Any], now_utc: datetime | None = None)
     return None
 
 
-def _save_account_schedule(config_path: Path, account_id: str, schedule_cfg: dict[str, Any]) -> bool:
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _new_schedule_id() -> str:
+    return f"sch-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+
+
+def _compute_one_time_run_at_local_iso(time_hhmm: str, timezone_name: str) -> str:
+    tz = _safe_zoneinfo(timezone_name)
+    if tz is None:
+        return ""
+    ok, _, run_time = _parse_hhmm(time_hhmm)
+    if not ok or run_time is None:
+        return ""
+    now_local = datetime.now(timezone.utc).astimezone(tz)
+    candidate = datetime.combine(now_local.date(), run_time, tzinfo=tz)
+    if candidate <= now_local:
+        candidate = candidate + timedelta(days=1)
+    return candidate.replace(second=0, microsecond=0).isoformat()
+
+
+def _ensure_schedule_record_defaults(
+    record: dict[str, Any],
+    *,
+    default_timezone: str = "UTC",
+    touch: bool = False,
+) -> dict[str, Any]:
+    normalized = dict(record) if isinstance(record, dict) else {}
+    now_iso = _now_utc_iso()
+
+    schedule_type = str(normalized.get("type", "")).strip().lower()
+    timezone_name = str(normalized.get("timezone", "")).strip() or default_timezone or "UTC"
+
+    normalized["id"] = str(normalized.get("id", "")).strip() or _new_schedule_id()
+    normalized["enabled"] = bool(normalized.get("enabled", True))
+    normalized["type"] = schedule_type
+    normalized["timezone"] = timezone_name
+    normalized["dry_run"] = bool(normalized.get("dry_run", False))
+
+    if schedule_type in {"one_time", "daily", "weekly"}:
+        ok, _, parsed_time = _parse_hhmm(str(normalized.get("time", "")).strip())
+        normalized["time"] = parsed_time.strftime("%H:%M") if ok and parsed_time is not None else ""
+
+    if schedule_type == "weekly":
+        normalized["weekdays"] = _normalize_weekdays(normalized.get("weekdays", []))
+
+    if schedule_type == "specific_datetime":
+        normalized["specific_datetime"] = str(normalized.get("specific_datetime", "")).strip()
+
+    if schedule_type in {"one_time", "specific_datetime"}:
+        run_at = str(normalized.get("run_at", "")).strip()
+        if not run_at and schedule_type == "one_time":
+            run_at = _compute_one_time_run_at_local_iso(
+                str(normalized.get("time", "")).strip(),
+                timezone_name,
+            )
+        if not run_at and schedule_type == "specific_datetime":
+            run_at = str(normalized.get("specific_datetime", "")).strip()
+        normalized["run_at"] = run_at
+
+    normalized["created_at"] = str(normalized.get("created_at", "")).strip() or now_iso
+    if touch:
+        normalized["updated_at"] = now_iso
+    else:
+        normalized["updated_at"] = str(normalized.get("updated_at", "")).strip() or now_iso
+    normalized["last_run_at"] = str(normalized.get("last_run_at", "")).strip()
+    normalized["last_result"] = str(normalized.get("last_result", "")).strip()
+    normalized["last_status"] = str(normalized.get("last_status", "")).strip() or "pending"
+    return normalized
+
+
+def _extract_account_schedules(account: dict[str, Any]) -> list[dict[str, Any]]:
+    schedules_raw = account.get("schedules")
+    if isinstance(schedules_raw, list):
+        return [dict(item) for item in schedules_raw if isinstance(item, dict)]
+    legacy = account.get("schedule")
+    if isinstance(legacy, dict):
+        return [dict(legacy)]
+    return []
+
+
+def _save_account_schedules(config_path: Path, account_id: str, schedules: list[dict[str, Any]]) -> bool:
     try:
         config = load_raw_config(config_path)
         accounts = config.get("accounts", {})
@@ -211,7 +304,9 @@ def _save_account_schedule(config_path: Path, account_id: str, schedule_cfg: dic
         account = accounts.get(account_id)
         if not isinstance(account, dict):
             return False
-        account["schedule"] = dict(schedule_cfg)
+        account["schedules"] = [dict(item) for item in schedules if isinstance(item, dict)]
+        if "schedule" in account:
+            del account["schedule"]
         accounts[account_id] = account
         config["accounts"] = accounts
         save_raw_config(config_path, config)
@@ -220,18 +315,89 @@ def _save_account_schedule(config_path: Path, account_id: str, schedule_cfg: dic
         return False
 
 
-def _get_account_schedule(config_path: Path, account_id: str | None) -> dict[str, Any]:
+def _get_account_schedules(config_path: Path, account_id: str | None) -> list[dict[str, Any]]:
     if not account_id:
-        return {}
+        return []
     config = load_raw_config(config_path)
     accounts = config.get("accounts", {})
     if not isinstance(accounts, dict):
-        return {}
+        return []
     account = accounts.get(account_id)
     if not isinstance(account, dict):
-        return {}
-    schedule_cfg = account.get("schedule", {})
-    return dict(schedule_cfg) if isinstance(schedule_cfg, dict) else {}
+        return []
+    records = _extract_account_schedules(account)
+    normalized: list[dict[str, Any]] = []
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        timezone_name = str(item.get("timezone", "")).strip() or "UTC"
+        normalized.append(_ensure_schedule_record_defaults(item, default_timezone=timezone_name, touch=False))
+    return normalized
+
+
+def _find_schedule_record(
+    schedules: list[dict[str, Any]],
+    schedule_id: str,
+) -> tuple[int, dict[str, Any] | None]:
+    target = schedule_id.strip()
+    if not target:
+        return -1, None
+    for idx, item in enumerate(schedules):
+        if str(item.get("id", "")).strip() == target:
+            return idx, item
+    return -1, None
+
+
+def _get_next_due_schedule(config_path: Path) -> tuple[str, dict[str, Any], datetime] | None:
+    config = load_raw_config(config_path)
+    accounts = config.get("accounts", {})
+    if not isinstance(accounts, dict):
+        return None
+
+    best: tuple[str, dict[str, Any], datetime] | None = None
+    for account_id, account in accounts.items():
+        if not isinstance(account, dict):
+            continue
+        for item in _extract_account_schedules(account):
+            record = _ensure_schedule_record_defaults(
+                item,
+                default_timezone=str(item.get("timezone", "")).strip() or "UTC",
+                touch=False,
+            )
+            if not bool(record.get("enabled", True)):
+                continue
+            next_run = _compute_next_run_utc(record)
+            if next_run is None:
+                continue
+            if best is None or next_run < best[2]:
+                best = (str(account_id), record, next_run)
+    return best
+
+
+def _to_schedule_ui_record(record: dict[str, Any]) -> dict[str, Any]:
+    item = dict(record)
+    run_at_raw = str(item.get("run_at", "")).strip()
+    if run_at_raw:
+        item["run_at_input"] = _iso_to_local_datetime_input(
+            run_at_raw,
+            str(item.get("timezone", "")),
+        )
+    if isinstance(item.get("specific_datetime"), str):
+        item["specific_datetime_input"] = _iso_to_local_datetime_input(
+            str(item.get("specific_datetime", "")),
+            str(item.get("timezone", "")),
+        )
+    if not str(item.get("specific_datetime_input", "")).strip() and run_at_raw:
+        item["specific_datetime_input"] = _iso_to_local_datetime_input(
+            run_at_raw,
+            str(item.get("timezone", "")),
+        )
+    if bool(item.get("enabled", True)):
+        next_run = _compute_next_run_utc(item)
+        item["next_run_at"] = next_run.isoformat() if next_run else ""
+    else:
+        item["next_run_at"] = ""
+    return item
 
 
 def _iso_to_local_datetime_input(value: str, timezone_name: str | None = None) -> str:
@@ -266,7 +432,7 @@ class _WebState:
         self.stop_event = threading.Event()
         self.schedule_thread: threading.Thread | None = None
         self.schedule_stop_event = threading.Event()
-        self.schedule_pause_event = threading.Event()
+        self.schedule_wake_event = threading.Event()
         self.schedule_status: str = "idle"
         self.schedule_message: str = ""
         self.schedule_next_run_at: str = ""
@@ -275,6 +441,7 @@ class _WebState:
         self.schedule_account: str = ""
         self.schedule_spec: dict[str, Any] = {}
         self.schedule_dry_run: bool = False
+        self._ensure_schedule_thread_locked()
 
     def _sync_runner_locked(self) -> None:
         if self.runner_thread is not None and not self.runner_thread.is_alive():
@@ -286,6 +453,162 @@ class _WebState:
             self.stop_event.clear()
         if self.schedule_thread is not None and not self.schedule_thread.is_alive():
             self.schedule_thread = None
+
+    def _mark_schedule_changed_locked(self) -> None:
+        self.schedule_wake_event.set()
+        self._ensure_schedule_thread_locked()
+
+    def _ensure_schedule_thread_locked(self) -> None:
+        self._sync_runner_locked()
+        if self.schedule_thread is not None and self.schedule_thread.is_alive():
+            return
+
+        self.schedule_stop_event.clear()
+        self.schedule_wake_event.clear()
+
+        def _schedule_worker() -> None:
+            try:
+                while not self.schedule_stop_event.is_set():
+                    due = _get_next_due_schedule(self.config_path)
+                    if due is None:
+                        with self.lock:
+                            self.schedule_status = "idle"
+                            self.schedule_message = "No enabled schedules."
+                            self.schedule_next_run_at = ""
+                            self.schedule_account = ""
+                            self.schedule_spec = {}
+                            self.schedule_dry_run = False
+                        self.schedule_wake_event.wait(2.0)
+                        self.schedule_wake_event.clear()
+                        continue
+
+                    account_id, record, next_run_utc = due
+                    schedule_id = str(record.get("id", "")).strip()
+                    with self.lock:
+                        self.schedule_status = "running"
+                        self.schedule_message = f"Waiting for schedule '{schedule_id}' on '{account_id}'."
+                        self.schedule_next_run_at = next_run_utc.isoformat()
+                        self.schedule_account = account_id
+                        self.schedule_spec = dict(record)
+                        self.schedule_dry_run = bool(record.get("dry_run", False))
+
+                    should_recompute = False
+                    while not self.schedule_stop_event.is_set():
+                        now_utc = datetime.now(timezone.utc)
+                        if now_utc >= next_run_utc:
+                            break
+                        wait_seconds = max(0.2, min(1.0, (next_run_utc - now_utc).total_seconds()))
+                        if self.schedule_wake_event.wait(wait_seconds):
+                            self.schedule_wake_event.clear()
+                            should_recompute = True
+                            break
+                    if self.schedule_stop_event.is_set():
+                        break
+                    if should_recompute:
+                        continue
+
+                    with self.lock:
+                        self.schedule_status = "executing"
+                        self.schedule_message = f"Running schedule '{schedule_id}' on '{account_id}'."
+
+                    started = False
+                    start_error = ""
+                    run_live = not bool(record.get("dry_run", False))
+                    while not self.schedule_stop_event.is_set():
+                        with self.lock:
+                            ok_start, msg_start = self.start_run(account_id, live=run_live)
+                        if ok_start:
+                            started = True
+                            break
+                        if "in progress" in msg_start.lower():
+                            if self.schedule_wake_event.wait(1.0):
+                                self.schedule_wake_event.clear()
+                            continue
+                        start_error = msg_start
+                        break
+
+                    if not started:
+                        schedules = _get_account_schedules(self.config_path, account_id)
+                        idx, current = _find_schedule_record(schedules, schedule_id)
+                        if idx >= 0 and isinstance(current, dict):
+                            updated = _ensure_schedule_record_defaults(
+                                current,
+                                default_timezone=str(current.get("timezone", "")).strip() or "UTC",
+                                touch=True,
+                            )
+                            updated["last_run_at"] = _now_utc_iso()
+                            updated["last_result"] = start_error or "Skipped (scheduler stopped)."
+                            updated["last_status"] = "error"
+                            if str(updated.get("type", "")).strip() in {"one_time", "specific_datetime"}:
+                                updated["enabled"] = False
+                            schedules[idx] = updated
+                            _save_account_schedules(self.config_path, account_id, schedules)
+                        with self.lock:
+                            self.schedule_last_run_at = _now_utc_iso()
+                            self.schedule_last_result = start_error or "Skipped (scheduler stopped)."
+                            self.schedule_status = "running"
+                            self.schedule_message = "Waiting for next scheduled run."
+                        continue
+
+                    while not self.schedule_stop_event.is_set():
+                        with self.lock:
+                            active = self.runner_thread is not None and self.runner_thread.is_alive()
+                        if not active:
+                            break
+                        self.schedule_wake_event.wait(0.5)
+                        self.schedule_wake_event.clear()
+
+                    if self.schedule_stop_event.is_set():
+                        with self.lock:
+                            if self.runner_thread is not None and self.runner_account == account_id:
+                                self.stop_run(account_id)
+                        break
+
+                    with self.lock:
+                        self._sync_runner_locked()
+                        run_result = self.runner_message or "success"
+                    run_status = "success" if run_result == "success" else "error"
+
+                    schedules = _get_account_schedules(self.config_path, account_id)
+                    idx, current = _find_schedule_record(schedules, schedule_id)
+                    if idx >= 0 and isinstance(current, dict):
+                        updated = _ensure_schedule_record_defaults(
+                            current,
+                            default_timezone=str(current.get("timezone", "")).strip() or "UTC",
+                            touch=True,
+                        )
+                        updated["last_run_at"] = _now_utc_iso()
+                        updated["last_result"] = run_result
+                        updated["last_status"] = run_status
+                        if str(updated.get("type", "")).strip() in {"one_time", "specific_datetime"}:
+                            updated["enabled"] = False
+                        schedules[idx] = updated
+                        _save_account_schedules(self.config_path, account_id, schedules)
+
+                    with self.lock:
+                        self.schedule_last_run_at = _now_utc_iso()
+                        self.schedule_last_result = run_result
+                        self.schedule_status = "running"
+                        self.schedule_message = "Waiting for next scheduled run."
+            except Exception as exc:  # pragma: no cover - defensive
+                with self.lock:
+                    self.schedule_status = "error"
+                    self.schedule_message = f"{type(exc).__name__}: {exc}"
+                    self.schedule_next_run_at = ""
+            finally:
+                with self.lock:
+                    self.schedule_thread = None
+                    if self.schedule_status != "error":
+                        self.schedule_status = "stopped"
+                        self.schedule_message = "Scheduler stopped."
+                        self.schedule_next_run_at = ""
+
+        self.schedule_thread = threading.Thread(
+            target=_schedule_worker,
+            name="web-ui-scheduler-loop",
+            daemon=True,
+        )
+        self.schedule_thread.start()
 
     def snapshot_runner(self, selected_account: str | None = None) -> dict[str, Any]:
         self._sync_runner_locked()
@@ -306,6 +629,9 @@ class _WebState:
         is_active = self.schedule_thread is not None and self.schedule_thread.is_alive()
         target = (selected_account or "").strip()
         is_selected = bool(target and target == self.schedule_account)
+        account_schedules = _get_account_schedules(self.config_path, target)
+        ui_records = [_to_schedule_ui_record(item) for item in account_schedules]
+        ui_records.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
         return {
             "is_active": is_active,
             "status": self.schedule_status,
@@ -317,6 +643,7 @@ class _WebState:
             "last_result": self.schedule_last_result,
             "spec": self.schedule_spec,
             "dry_run": self.schedule_dry_run,
+            "records": ui_records,
         }
 
     def start_run(self, account_id: str, *, live: bool) -> tuple[bool, str]:
@@ -396,10 +723,6 @@ class _WebState:
         return True, "Stop requested. Waiting for current step to finish."
 
     def start_schedule(self, account_id: str, schedule_rules: dict[str, Any]) -> tuple[bool, str]:
-        self._sync_runner_locked()
-        if self.schedule_thread is not None:
-            return False, "A schedule is already active."
-
         account = account_id.strip()
         if not account:
             return False, "Account id is required."
@@ -410,134 +733,82 @@ class _WebState:
         ok, error, normalized = _normalize_schedule_rules(schedule_rules, default_tz)
         if not ok:
             return False, error
-        if not _save_account_schedule(self.config_path, account, normalized):
+        schedule_record = _ensure_schedule_record_defaults(normalized, default_timezone=default_tz, touch=True)
+        schedule_record["id"] = _new_schedule_id()
+
+        schedules = _get_account_schedules(self.config_path, account)
+        schedules.append(schedule_record)
+        if not _save_account_schedules(self.config_path, account, schedules):
             return False, "Failed to save schedule config."
 
-        self.schedule_stop_event.clear()
-        self.schedule_pause_event.clear()
-        self.schedule_account = account
-        self.schedule_spec = dict(normalized)
-        self.schedule_dry_run = bool(normalized.get("dry_run", False))
-        self.schedule_status = "running"
-        self.schedule_message = "Waiting for next scheduled run."
-        self.schedule_last_result = ""
+        with self.lock:
+            self.schedule_account = account
+            self.schedule_spec = dict(schedule_record)
+            self.schedule_dry_run = bool(schedule_record.get("dry_run", False))
+            self.schedule_status = "running"
+            self.schedule_message = f"Schedule '{schedule_record['id']}' saved."
+            next_run = _compute_next_run_utc(schedule_record)
+            self.schedule_next_run_at = next_run.isoformat() if next_run else ""
+            self._mark_schedule_changed_locked()
 
-        def _worker() -> None:
-            try:
-                one_shot = str(normalized.get("type", "")) in {"one_time", "specific_datetime"}
-                while not self.schedule_stop_event.is_set():
-                    next_run_utc = _compute_next_run_utc(normalized)
-                    with self.lock:
-                        self.schedule_next_run_at = next_run_utc.isoformat() if next_run_utc else ""
-                    if next_run_utc is None:
-                        with self.lock:
-                            self.schedule_status = "completed"
-                            self.schedule_message = "No upcoming run (date/time already passed)."
-                        break
+        return True, f"Schedule '{schedule_record['id']}' saved for '{account}'."
 
-                    while not self.schedule_stop_event.is_set():
-                        now_utc = datetime.now(timezone.utc)
-                        if now_utc >= next_run_utc:
-                            break
-                        wait_seconds = max(0.2, min(1.0, (next_run_utc - now_utc).total_seconds()))
-                        self.schedule_stop_event.wait(wait_seconds)
+    def stop_schedule(self, account_id: str, schedule_id: str = "") -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
 
-                    if self.schedule_stop_event.is_set():
-                        break
+        schedules = _get_account_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No schedules found for this account."
 
-                    with self.lock:
-                        self.schedule_status = "executing"
-                        self.schedule_message = "Running scheduled posting."
+        target_id = schedule_id.strip()
+        changed = 0
+        if target_id:
+            idx, current = _find_schedule_record(schedules, target_id)
+            if idx < 0 or not isinstance(current, dict):
+                return False, f"Schedule '{target_id}' not found."
+            updated = _ensure_schedule_record_defaults(
+                current,
+                default_timezone=str(current.get("timezone", "")).strip() or "UTC",
+                touch=True,
+            )
+            if bool(updated.get("enabled", True)):
+                updated["enabled"] = False
+                updated["last_status"] = "stopped"
+                schedules[idx] = updated
+                changed = 1
+        else:
+            for idx, current in enumerate(schedules):
+                if not isinstance(current, dict):
+                    continue
+                updated = _ensure_schedule_record_defaults(
+                    current,
+                    default_timezone=str(current.get("timezone", "")).strip() or "UTC",
+                    touch=True,
+                )
+                if bool(updated.get("enabled", True)):
+                    updated["enabled"] = False
+                    updated["last_status"] = "stopped"
+                    schedules[idx] = updated
+                    changed += 1
+            if changed == 0:
+                return False, "No enabled schedules to stop."
 
-                    started = False
-                    start_error = ""
-                    while not self.schedule_stop_event.is_set():
-                        with self.lock:
-                            ok_start, msg_start = self.start_run(account, live=not self.schedule_dry_run)
-                        if ok_start:
-                            started = True
-                            break
-                        if "in progress" in msg_start.lower():
-                            self.schedule_stop_event.wait(1.5)
-                            continue
-                        start_error = msg_start
-                        break
+        if not _save_account_schedules(self.config_path, account, schedules):
+            return False, "Failed to update schedule config."
 
-                    if not started:
-                        with self.lock:
-                            self.schedule_last_run_at = datetime.now(timezone.utc).isoformat()
-                            self.schedule_last_result = start_error or "Skipped (scheduler stopped)."
-                            if one_shot:
-                                self.schedule_status = "completed"
-                                self.schedule_message = "One-time schedule finished."
-                                self.schedule_next_run_at = ""
-                            else:
-                                self.schedule_status = "running"
-                                self.schedule_message = "Waiting for next scheduled run."
-                        if one_shot:
-                            break
-                        continue
+        with self.lock:
+            if target_id:
+                self.schedule_message = f"Schedule '{target_id}' disabled."
+            else:
+                self.schedule_message = f"Disabled {changed} schedule(s) for '{account}'."
+            if self.runner_thread is not None and self.runner_account == account:
+                self.stop_event.set()
+                self.pause_event.clear()
+            self._mark_schedule_changed_locked()
 
-                    while not self.schedule_stop_event.is_set():
-                        with self.lock:
-                            active = self.runner_thread is not None and self.runner_thread.is_alive()
-                        if not active:
-                            break
-                        self.schedule_stop_event.wait(0.5)
-
-                    if self.schedule_stop_event.is_set():
-                        with self.lock:
-                            if self.runner_thread is not None and self.runner_account == account:
-                                self.stop_run(account)
-                        break
-
-                    with self.lock:
-                        self.schedule_last_run_at = datetime.now(timezone.utc).isoformat()
-                        self.schedule_last_result = self.runner_message or "success"
-                        self.schedule_status = "running"
-                        self.schedule_message = "Waiting for next scheduled run."
-
-                    if one_shot:
-                        with self.lock:
-                            self.schedule_status = "completed"
-                            self.schedule_message = "One-time schedule finished."
-                            self.schedule_next_run_at = ""
-                        break
-            except Exception as exc:  # pragma: no cover - defensive
-                with self.lock:
-                    self.schedule_status = "error"
-                    self.schedule_message = f"{type(exc).__name__}: {exc}"
-            finally:
-                with self.lock:
-                    if self.schedule_status == "stopping":
-                        self.schedule_status = "stopped"
-                        self.schedule_message = "Schedule stopped."
-                    self.schedule_thread = None
-                    if self.schedule_status in {"stopped", "completed", "error"}:
-                        self.schedule_next_run_at = ""
-
-        self.schedule_thread = threading.Thread(
-            target=_worker,
-            name=f"web-ui-scheduler-{account}",
-            daemon=True,
-        )
-        self.schedule_thread.start()
-        return True, f"Schedule started for '{account}'."
-
-    def stop_schedule(self, account_id: str) -> tuple[bool, str]:
-        self._sync_runner_locked()
-        if self.schedule_thread is None:
-            return False, "No active schedule to stop."
-        if self.schedule_account != account_id:
-            return False, f"Schedule is active for '{self.schedule_account}'."
-
-        self.schedule_stop_event.set()
-        self.schedule_status = "stopping"
-        self.schedule_message = "Stopping schedule..."
-        if self.runner_thread is not None and self.runner_account == account_id:
-            self.stop_event.set()
-            self.pause_event.clear()
-        return True, "Schedule stop requested."
+        return True, self.schedule_message
 
 
 def _build_state(
@@ -577,12 +848,10 @@ def _build_state(
         })
 
     posting_cfg = dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {}
-    schedule_cfg = _get_account_schedule(config_path, account_id)
-    if isinstance(schedule_cfg, dict) and isinstance(schedule_cfg.get("specific_datetime"), str):
-        schedule_cfg["specific_datetime_input"] = _iso_to_local_datetime_input(
-            str(schedule_cfg.get("specific_datetime", "")),
-            str(schedule_cfg.get("timezone", "")),
-        )
+    schedule_records = _get_account_schedules(config_path, account_id)
+    schedule_records_ui = [_to_schedule_ui_record(item) for item in schedule_records]
+    schedule_records_ui.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+    latest_schedule = schedule_records_ui[0] if schedule_records_ui else {}
 
     templates: list[dict[str, Any]] = []
     for tpl in load_templates(Path("templates")):
@@ -642,10 +911,12 @@ def _build_state(
         "last_result": "",
         "spec": {},
         "dry_run": False,
+        "records": schedule_records_ui,
       },
       "preset": preset_status,
       "presets": presets_list,
-      "saved_schedule": schedule_cfg,
+      "saved_schedule": latest_schedule,
+      "saved_schedules": schedule_records_ui,
     }
 
 
@@ -1189,6 +1460,66 @@ def _render_page() -> str:
       min-width: 180px;
       flex: 1;
     }
+    .preset-inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: nowrap;
+    }
+    .preset-inline > select {
+      flex: 1 1 auto;
+      min-width: 150px;
+      max-width: 260px;
+    }
+    .preset-inline > button {
+      padding: 8px 10px;
+      min-width: 40px;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+    .schedule-records {
+      margin-top: 10px;
+      border: 2px solid var(--fg);
+      border-radius: var(--r-md);
+      background: var(--card);
+      padding: 8px;
+      max-height: 170px;
+      overflow: auto;
+      display: grid;
+      gap: 7px;
+    }
+    .schedule-item {
+      border: 2px solid var(--fg);
+      border-radius: var(--r-sm);
+      background: var(--muted);
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .schedule-item .meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      color: var(--muted-fg);
+      font-size: 11px;
+    }
+    .schedule-item .meta strong {
+      color: var(--fg);
+      font-size: 12px;
+    }
+    .schedule-item .actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .schedule-item .actions button {
+      padding: 5px 9px;
+      font-size: 11px;
+    }
 
     /* ── Divider ────────────────────────── */
     .divider {
@@ -1348,11 +1679,8 @@ def _render_page() -> str:
           <span id="presetUnsavedBadge" class="pill p-orange" style="display:none">Unsaved changes</span>
         </div>
 
-        <div class="frow">
-          <select id="presetSelect" style="flex:1;min-width:0"></select>
-        </div>
-
-        <div class="frow">
+        <div class="preset-inline">
+          <select id="presetSelect" title="Select preset" aria-label="Select preset"></select>
           <button id="saveNewPresetBtn" class="btn-primary" type="button" title="Save new preset" aria-label="Save new preset">💾</button>
           <button id="updatePresetBtn" class="btn-yellow" type="button" title="Update selected preset" aria-label="Update selected preset">📝</button>
           <button id="deletePresetBtn" class="btn-red" type="button" title="Delete selected preset" aria-label="Delete selected preset">🗑️</button>
@@ -1491,9 +1819,12 @@ def _render_page() -> str:
           </div>
           <div class="frow">
             <button id="startScheduleBtn" class="btn-primary" type="button">⏰ Start Schedule</button>
-            <button id="stopScheduleBtn" class="btn-red" type="button">■ Stop Schedule</button>
+            <button id="stopScheduleBtn" class="btn-red" type="button">■ Stop All</button>
           </div>
           <div id="scheduleInfo" class="mono" style="margin-top:6px">No schedule active.</div>
+          <div id="scheduleRecords" class="schedule-records">
+            <div class="mono">No schedules saved.</div>
+          </div>
         </div>
 
         <div class="divider">
@@ -2419,18 +2750,33 @@ def _render_page() -> str:
     timeInput.disabled = type === 'specific_datetime';
   }
 
+  async function disableSchedule(scheduleId) {
+    if (!selectedAccount) {
+      toast('Please select an account first.', true);
+      return;
+    }
+    if (!scheduleId) {
+      toast('Invalid schedule id.', true);
+      return;
+    }
+    await callAction('stop_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
   function renderScheduleState(data) {
     const sch = data.schedule_control || {};
     const saved = data.saved_schedule || {};
+    const savedList = (data.saved_schedules || sch.records || []).slice();
     const info = document.getElementById('scheduleInfo');
     const startBtn = document.getElementById('startScheduleBtn');
     const stopBtn = document.getElementById('stopScheduleBtn');
+    const listEl = document.getElementById('scheduleRecords');
     const active = !!sch.is_active;
     const isSelectedSchedule = !!sch.is_selected_account;
-    startBtn.disabled = active;
-    stopBtn.disabled = !(active && isSelectedSchedule);
+    startBtn.disabled = false;
+    const hasEnabled = savedList.some(item => !!item.enabled);
+    stopBtn.disabled = !hasEnabled;
     if (!active) {
-      info.textContent = sch.message || 'No schedule active.';
+      info.textContent = sch.message || (hasEnabled ? 'Schedules saved and waiting.' : 'No schedule active.');
     } else {
       const next = sch.next_run_at ? new Date(sch.next_run_at).toLocaleString() : '-';
       const last = sch.last_run_at ? new Date(sch.last_run_at).toLocaleString() : '-';
@@ -2440,11 +2786,41 @@ def _render_page() -> str:
       info.textContent = `Status: ${sch.status} | Next: ${next} | Last: ${last} | Mode: ${mode}${owner}${result}`;
     }
 
+    if (!savedList.length) {
+      listEl.innerHTML = '<div class="mono">No schedules saved.</div>';
+    } else {
+      const rows = savedList.map(item => {
+        const id = String(item.id || '');
+        const enabled = !!item.enabled;
+        const type = String(item.type || 'unknown');
+        const tz = String(item.timezone || 'UTC');
+        const mode = item.dry_run ? 'dry' : 'live';
+        const next = item.next_run_at ? new Date(item.next_run_at).toLocaleString() : '-';
+        const last = item.last_run_at ? new Date(item.last_run_at).toLocaleString() : '-';
+        const status = String(item.last_status || 'pending');
+        const badgeClass = enabled ? 'p-green' : 'p-gray';
+        return `
+          <div class="schedule-item">
+            <div class="meta">
+              <strong>${esc(id)} · ${esc(type)}</strong>
+              <span>Next: ${esc(next)} | Last: ${esc(last)}</span>
+              <span>TZ: ${esc(tz)} | Mode: ${esc(mode)} | Status: ${esc(status)}</span>
+            </div>
+            <div class="actions">
+              <span class="pill ${badgeClass}">${enabled ? 'Enabled' : 'Disabled'}</span>
+              ${enabled ? `<button class="btn-red" type="button" onclick="disableSchedule('${esc(id)}')">Stop</button>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      listEl.innerHTML = rows.join('');
+    }
+
     // Prefill schedule inputs only when backend spec changes.
     let spec = {};
     if (isSelectedSchedule && sch && typeof sch.spec === 'object' && sch.spec.type) {
       spec = sch.spec;
-    } else if (saved && typeof saved === 'object' && saved.enabled && saved.type) {
+    } else if (saved && typeof saved === 'object' && saved.type) {
       spec = saved;
     }
     const signature = `${selectedAccount || ''}::${JSON.stringify(spec || {})}`;
@@ -2757,7 +3133,7 @@ def _render_page() -> str:
       toast('Please select an account first.', true);
       return;
     }
-    await callAction('stop_schedule', selectedAccount);
+    await callAction('stop_schedule', selectedAccount, '', '', { schedule_id: '' });
   });
   document.getElementById('presetSelect').addEventListener('change', async ev => {
     const filename = (ev.target.value || '').trim();
@@ -3240,7 +3616,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   elif action == "start_schedule":
                     ok, result = state.start_schedule(account_id, template_data if isinstance(template_data, dict) else {})
                   elif action == "stop_schedule":
-                    ok, result = state.stop_schedule(account_id)
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.stop_schedule(account_id, schedule_id)
                   elif action == "pause_run":
                     ok, result = state.pause_run(account_id)
                   elif action == "resume_run":
