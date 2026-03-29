@@ -4,6 +4,24 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 19:20
+
+**Shorten preset action buttons and add tooltips**
+
+Refined Presets card button UX by removing long button text and using icon-only action buttons with hover tooltips.
+
+- `Save New`, `Update`, `Delete` buttons are now compact icon-only (`💾`, `📝`, `🗑️`).
+- Added `title` tooltips and `aria-label` accessibility labels for each button.
+- Dynamic tooltip text now includes selected preset filename for update/delete actions.
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+
+**Files changed:**
+- core/web_ui.py
+
+---
+
 ## 2026-03-29 18:44
 
 **Implement Web UI posting scheduler (one-time/daily/weekly/specific datetime)**

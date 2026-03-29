@@ -1353,9 +1353,9 @@ def _render_page() -> str:
         </div>
 
         <div class="frow">
-          <button id="saveNewPresetBtn" class="btn-primary" type="button">💾 Save New</button>
-          <button id="updatePresetBtn" class="btn-yellow" type="button">📝 Update</button>
-          <button id="deletePresetBtn" class="btn-red" type="button">🗑️ Delete</button>
+          <button id="saveNewPresetBtn" class="btn-primary" type="button" title="Save new preset" aria-label="Save new preset">💾</button>
+          <button id="updatePresetBtn" class="btn-yellow" type="button" title="Update selected preset" aria-label="Update selected preset">📝</button>
+          <button id="deletePresetBtn" class="btn-red" type="button" title="Delete selected preset" aria-label="Delete selected preset">🗑️</button>
         </div>
 
         <div id="presetInfo" class="mono" style="margin-top:8px">Using config.yaml</div>
@@ -2505,14 +2505,20 @@ def _render_page() -> str:
 
     const updateBtn = document.getElementById('updatePresetBtn');
     const deleteBtn = document.getElementById('deletePresetBtn');
+    updateBtn.textContent = '📝';
+    deleteBtn.textContent = '🗑️';
     updateBtn.disabled = !sel.value;
     deleteBtn.disabled = !sel.value;
     if (sel.value) {
-      updateBtn.textContent = `📝 Update (${sel.value})`;
-      deleteBtn.textContent = `🗑️ Delete (${sel.value})`;
+      updateBtn.title = `Update preset: ${sel.value}`;
+      updateBtn.setAttribute('aria-label', `Update preset: ${sel.value}`);
+      deleteBtn.title = `Delete preset: ${sel.value}`;
+      deleteBtn.setAttribute('aria-label', `Delete preset: ${sel.value}`);
     } else {
-      updateBtn.textContent = '📝 Update';
-      deleteBtn.textContent = '🗑️ Delete';
+      updateBtn.title = 'Update selected preset';
+      updateBtn.setAttribute('aria-label', 'Update selected preset');
+      deleteBtn.title = 'Delete selected preset';
+      deleteBtn.setAttribute('aria-label', 'Delete selected preset');
     }
   }
 
