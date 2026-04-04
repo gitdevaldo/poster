@@ -542,6 +542,18 @@ class _WebState:
                         self.schedule_status = "executing"
                         self.schedule_message = f"Running schedule '{schedule_id}' on '{account_id}'."
 
+                    # Auto-reset posted_log before scheduled run so all groups are posted
+                    try:
+                        with _account_env(account_id):
+                            from core.config_loader import load_config as _load_cfg
+                            cfg = _load_cfg(self.config_path)
+                            paths_cfg = cfg.get("paths", {}) if isinstance(cfg.get("paths"), dict) else {}
+                            posted_log_path = Path(str(paths_cfg.get("posted_log", "data/posted_log.json")))
+                            if posted_log_path.exists():
+                                posted_log_path.unlink()
+                    except Exception:
+                        pass  # Non-fatal; continue with run
+
                     started = False
                     start_error = ""
                     run_live = not bool(record.get("dry_run", False))
@@ -837,6 +849,32 @@ class _WebState:
             if self.runner_thread is not None and self.runner_account == account:
                 self.stop_event.set()
                 self.pause_event.clear()
+            self._mark_schedule_changed_locked()
+
+        return True, self.schedule_message
+
+    def delete_schedule(self, account_id: str, schedule_id: str) -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        target_id = schedule_id.strip()
+        if not target_id:
+            return False, "Schedule id is required."
+
+        schedules = _get_account_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No schedules found for this account."
+
+        idx, _ = _find_schedule_record(schedules, target_id)
+        if idx < 0:
+            return False, f"Schedule '{target_id}' not found."
+
+        del schedules[idx]
+        if not _save_account_schedules(self.config_path, account, schedules):
+            return False, "Failed to delete schedule config."
+
+        with self.lock:
+            self.schedule_message = f"Schedule '{target_id}' deleted."
             self._mark_schedule_changed_locked()
 
         return True, self.schedule_message
@@ -2793,6 +2831,21 @@ def _render_page() -> str:
     await callAction('stop_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
   }
 
+  async function deleteSchedule(scheduleId) {
+    if (!selectedAccount) {
+      toast('Please select an account first.', true);
+      return;
+    }
+    if (!scheduleId) {
+      toast('Invalid schedule id.', true);
+      return;
+    }
+    if (!confirm(`Delete schedule "${scheduleId}"? This cannot be undone.`)) {
+      return;
+    }
+    await callAction('delete_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
   function renderScheduleState(data) {
     const sch = data.schedule_control || {};
     const saved = data.saved_schedule || {};
@@ -2839,7 +2892,8 @@ def _render_page() -> str:
             </div>
             <div class="actions">
               <span class="pill ${badgeClass}">${enabled ? 'Enabled' : 'Disabled'}</span>
-              ${enabled ? `<button class="btn-red" type="button" onclick="disableSchedule('${esc(id)}')">Stop</button>` : ''}
+              ${enabled ? `<button class="btn-red" type="button" onclick="disableSchedule('${esc(id)}')" title="Stop this schedule">Stop</button>` : ''}
+              <button class="btn-red" type="button" onclick="deleteSchedule('${esc(id)}')" title="Delete this schedule">🗑️</button>
             </div>
           </div>
         `;
@@ -3631,6 +3685,7 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   "disable_preset",
                   "start_schedule",
                   "stop_schedule",
+                  "delete_schedule",
                 }
                 if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
@@ -3649,6 +3704,9 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   elif action == "stop_schedule":
                     schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
                     ok, result = state.stop_schedule(account_id, schedule_id)
+                  elif action == "delete_schedule":
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.delete_schedule(account_id, schedule_id)
                   elif action == "pause_run":
                     ok, result = state.pause_run(account_id)
                   elif action == "resume_run":

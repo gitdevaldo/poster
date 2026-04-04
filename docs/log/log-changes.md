@@ -4,6 +4,33 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-03-29 20:15
+
+**Add delete schedule feature and auto-reset posted_log**
+
+Scheduler enhancements requested by user:
+
+1. **Auto-reset posted_log before scheduled runs** (already implemented in prior commit):
+   - Before executing a scheduled run, the scheduler deletes the account's `posted_log.json`
+   - This ensures all groups are posted to, not just groups missing from the log
+   - Applies only to scheduled runs (not manual runs)
+
+2. **Delete schedule button**:
+   - Added `delete_schedule` backend method to `_WebState` class
+   - Added `delete_schedule` action handler in HTTP action routing
+   - Added `deleteSchedule()` JavaScript function with confirmation dialog
+   - Added 🗑️ delete button to each schedule record in the UI
+   - Deleting a schedule permanently removes it from `config.yaml`
+
+Validation:
+- `python3 -m compileall main.py core` passed.
+
+**Files changed:**
+- core/web_ui.py
+- docs/log/log-changes.md
+
+---
+
 ## 2026-03-29 19:46
 
 **Fix schedule ID persistence and clarify saved-record behavior**
