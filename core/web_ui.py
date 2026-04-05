@@ -1172,10 +1172,14 @@ _CONTEXT_LABEL_MAP = {
     "error": "Detail",
     "account": "Account",
     "template": "Template",
+    "removed_groups": "Removed",
+    "removed_count": "Removed",
+    "scraped_count": "Scraped",
+    "merged_count": "Total",
 }
 
 
-_CONTEXT_SKIP_KEYS = {"url", "error_raw", "traceback"}
+_CONTEXT_SKIP_KEYS = {"url", "error_raw", "traceback", "groups_path", "fallback_url"}
 
 
 def _format_context(context: dict) -> str:

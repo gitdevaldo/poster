@@ -258,7 +258,7 @@ def _extract_groups_from_page(
     return list(groups.values())
 
 
-def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     now = datetime.now(timezone.utc).isoformat()
     merged_by_id: dict[str, dict[str, Any]] = {}
     existing_by_url_key: dict[str, dict[str, Any]] = {}
@@ -299,6 +299,9 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
             return existing_active_by_url_key[key]
         return None
 
+    # Track which IDs were confirmed present in the fresh scrape.
+    scraped_ids: set[str] = set()
+
     for item in scraped:
         group_id = _canonical_group_id(str(item.get("id", "")).strip(), str(item.get("url", "")).strip())
         if not group_id:
@@ -337,9 +340,19 @@ def _merge_groups(existing: list[dict[str, Any]], scraped: list[dict[str, str]])
                 "updated_at": now,
             }
 
+        scraped_ids.add(group_id)
+
+    # Remove groups that were in the existing list but not found in the fresh scrape.
+    # These are groups the user has left or that are no longer accessible.
+    removed: list[dict[str, Any]] = []
+    if scraped_ids:
+        stale_ids = [gid for gid in list(merged_by_id) if gid not in scraped_ids]
+        for gid in stale_ids:
+            removed.append(merged_by_id.pop(gid))
+
     merged_list = list(merged_by_id.values())
     merged_list.sort(key=lambda x: str(x.get("name", "")).lower())
-    return merged_list
+    return merged_list, removed
 
 
 def _merge_scraped_lists(primary: list[dict[str, str]], fallback: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -445,16 +458,23 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
         raise
 
     existing_groups = _load_existing_groups(groups_path)
-    merged = _merge_groups(existing_groups, scraped_groups)
+    merged, removed = _merge_groups(existing_groups, scraped_groups)
     with groups_path.open("w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
+
+    if removed:
+        removed_names = [str(g.get("name") or g.get("id", "?")) for g in removed]
+        log_event(
+            f"Removed {len(removed)} group(s) no longer found in scrape (left or unavailable).",
+            context={"removed_groups": ", ".join(removed_names)},
+        )
 
     log_event(
         "Group scraping completed.",
         context={
             "scraped_count": len(scraped_groups),
             "merged_count": len(merged),
-            "groups_path": str(groups_path),
+            "removed_count": len(removed),
         },
     )
     return groups_path
