@@ -74,3 +74,4 @@ accounts:
       screenshots: data/accounts/account-1/logs/screenshots
     posting:
       template_file: post_1.yaml
+    schedules: []
