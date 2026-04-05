@@ -59,6 +59,10 @@ error_handling:
   - try again later
   - temporarily blocked
   - you've been restricted
+commenting:
+  template_file: post_1.yaml
+  min_delay_minutes: 1
+  max_delay_minutes: 3
 accounts:
   account-1:
     enabled: true

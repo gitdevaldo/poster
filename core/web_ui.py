@@ -26,7 +26,9 @@ from core.account_manager import (
     set_account_enabled,
     set_active_account,
     set_group_included,
+    set_group_comment_included,
 )
+from core.auto_commenter import run_auto_commenter
 from core.config_loader import ACCOUNT_ENV_VAR, load_config
 from core.group_scraper import scrape_groups
 from core.logger import get_log_file
@@ -472,6 +474,12 @@ class _WebState:
         self.schedule_account: str = ""
         self.schedule_spec: dict[str, Any] = {}
         self.schedule_dry_run: bool = False
+        self.commenter_thread: threading.Thread | None = None
+        self.commenter_account: str = ""
+        self.commenter_status: str = "idle"
+        self.commenter_message: str = ""
+        self.commenter_stop_event = threading.Event()
+        self.commenter_pause_event = threading.Event()
         self._ensure_schedule_thread_locked()
 
     def _sync_runner_locked(self) -> None:
@@ -484,6 +492,12 @@ class _WebState:
             self.stop_event.clear()
         if self.schedule_thread is not None and not self.schedule_thread.is_alive():
             self.schedule_thread = None
+        if self.commenter_thread is not None and not self.commenter_thread.is_alive():
+            self.commenter_thread = None
+            self.commenter_account = ""
+            self.commenter_status = "idle"
+            self.commenter_stop_event.clear()
+            self.commenter_pause_event.clear()
 
     def _mark_schedule_changed_locked(self) -> None:
         self.schedule_wake_event.set()
@@ -879,12 +893,80 @@ class _WebState:
 
         return True, self.schedule_message
 
+    def start_commenter(self, account_id: str) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.commenter_thread is not None:
+            return False, f"Auto commenter is already running for '{self.commenter_account}'."
+
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+
+        self.commenter_stop_event.clear()
+        self.commenter_pause_event.clear()
+        self.commenter_account = account
+        self.commenter_status = "running"
+        self.commenter_message = ""
+
+        def _commenter_worker() -> None:
+            error_message = ""
+            try:
+                with _account_env(account):
+                    run_auto_commenter(
+                        self.config_path,
+                        stop_event=self.commenter_stop_event,
+                        pause_event=self.commenter_pause_event,
+                    )
+            except Exception as exc:
+                error_message = f"{type(exc).__name__}: {exc}"
+            finally:
+                with self.lock:
+                    self._sync_runner_locked()
+                    if error_message:
+                        self.commenter_message = error_message
+                        self.commenter_status = "error"
+
+        thread = threading.Thread(
+            target=_commenter_worker,
+            name=f"web-ui-commenter-{account}",
+            daemon=True,
+        )
+        self.commenter_thread = thread
+        thread.start()
+        return True, f"Auto commenter started for '{account}'."
+
+    def stop_commenter(self, account_id: str) -> tuple[bool, str]:
+        self._sync_runner_locked()
+        if self.commenter_thread is None:
+            return False, "No active commenter to stop."
+        account = account_id.strip()
+        if account and self.commenter_account != account:
+            return False, f"Commenter is running for '{self.commenter_account}'."
+        self.commenter_stop_event.set()
+        self.commenter_pause_event.clear()
+        self.commenter_status = "stopping"
+        return True, "Commenter stop requested. Waiting for current step to finish."
+
+    def snapshot_commenter(self, selected_account: str | None = None) -> dict[str, Any]:
+        self._sync_runner_locked()
+        is_active = self.commenter_thread is not None and self.commenter_thread.is_alive()
+        target = (selected_account or "").strip()
+        is_selected = bool(target and target == self.commenter_account)
+        return {
+            "is_active": is_active,
+            "status": self.commenter_status,
+            "account_id": self.commenter_account,
+            "is_selected_account": is_selected,
+            "message": self.commenter_message,
+        }
+
 
 def _build_state(
   config_path: Path,
   selected_account: str | None = None,
   runner_state: dict[str, Any] | None = None,
   schedule_state: dict[str, Any] | None = None,
+  commenter_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     accounts = list_accounts(config_path)
     active = get_active_account(config_path) or ""
@@ -914,6 +996,7 @@ def _build_state(
             "name": str(g.get("name", "")),
             "url": str(g.get("url", "")),
             "included": bool(g.get("active", True)),
+            "comment_active": bool(g.get("comment_active", False)),
         })
 
     posting_cfg = dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {}
@@ -986,6 +1069,14 @@ def _build_state(
       "presets": presets_list,
       "saved_schedule": latest_schedule,
       "saved_schedules": schedule_records_ui,
+      "global_commenting": dict(effective_cfg.get("commenting", {})) if isinstance(effective_cfg.get("commenting"), dict) else {},
+      "commenter_control": commenter_state or {
+        "is_active": False,
+        "status": "idle",
+        "account_id": "",
+        "is_selected_account": False,
+        "message": "",
+      },
     }
 
 
@@ -1097,6 +1188,41 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
     config["posting"] = posting_cfg
     save_raw_config(config_path, config)
     return True, "Global posting rules updated."
+
+
+def _update_commenting_rules(config_path: Path, commenting_rules: dict[str, Any]) -> tuple[bool, str]:
+    config = load_raw_config(config_path)
+    commenting_cfg = dict(config.get("commenting", {})) if isinstance(config.get("commenting"), dict) else {}
+
+    int_fields = {"min_delay_minutes", "max_delay_minutes"}
+    str_fields = {"template_file"}
+
+    for key in int_fields:
+        if key not in commenting_rules:
+            continue
+        try:
+            value = int(commenting_rules.get(key))
+        except Exception:
+            return False, f"Invalid integer for '{key}'."
+        if value < 0:
+            return False, f"'{key}' must be 0 or greater."
+        commenting_cfg[key] = value
+
+    for key in str_fields:
+        if key in commenting_rules:
+            value = str(commenting_rules.get(key, "")).strip()
+            if not value:
+                return False, f"'{key}' cannot be empty."
+            commenting_cfg[key] = value
+
+    min_delay = int(commenting_cfg.get("min_delay_minutes", 0))
+    max_delay = int(commenting_cfg.get("max_delay_minutes", 0))
+    if min_delay > max_delay:
+        return False, "'min_delay_minutes' cannot be greater than 'max_delay_minutes'."
+
+    config["commenting"] = commenting_cfg
+    save_raw_config(config_path, config)
+    return True, "Comment settings updated."
 
 
 def _normalize_template_data(template_data: dict[str, Any]) -> dict[str, Any]:
@@ -1760,6 +1886,44 @@ def _render_page() -> str:
     #toast.ok  { border-left: 6px solid var(--green); }
     #toast.err { border-left: 6px solid var(--red); }
 
+    /* ── Tabs ───────────────────────────── */
+    .tabs-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 16px 0;
+      margin: 8px auto 0;
+      max-width: 1340px;
+      width: 100%;
+    }
+    .tab-btn {
+      font-family: var(--heading);
+      font-weight: 800;
+      font-size: 13px;
+      padding: 9px 18px;
+      border-radius: var(--r-md) var(--r-md) 0 0;
+      border: 2px solid var(--fg);
+      border-bottom: none;
+      background: var(--muted);
+      color: var(--muted-fg);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--fg);
+    }
+    .tab-btn:hover:not(.active) {
+      background: var(--card);
+      color: var(--fg);
+    }
+    .tab-panel {
+      display: block;
+    }
+    .tab-panel.hidden {
+      display: none;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, button { transition: none !important; animation: none !important; }
     }
@@ -1798,6 +1962,12 @@ def _render_page() -> str:
     </div>
   </header>
 
+  <div class="tabs-bar">
+    <button class="tab-btn active" data-tab="autopost">📮 Auto Post</button>
+    <button class="tab-btn" data-tab="autocomment">💬 Auto Comment</button>
+  </div>
+
+  <div id="tab-autopost" class="tab-panel">
   <div class="main-grid">
 
     <!-- Presets + Accounts -->
@@ -2000,6 +2170,141 @@ def _render_page() -> str:
       </div>
     </section>
   </div>
+  </div><!-- end tab-autopost -->
+
+  <!-- ═══════════════ AUTO COMMENT TAB ═══════════════ -->
+  <div id="tab-autocomment" class="tab-panel hidden">
+  <div class="main-grid">
+
+    <!-- Comment Settings + Shared Account Info -->
+    <aside>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">
+          <div class="t-icon ti-yellow">💬</div>
+          Comment Settings
+        </div>
+
+        <div class="field">
+          <label class="mini-lbl" for="cmTemplateFile">Post Template to Comment From</label>
+          <select id="cmTemplateFile" style="width:100%"></select>
+        </div>
+
+        <div class="frow" style="margin-top:8px">
+          <div class="field">
+            <label class="mini-lbl" for="cmMinDelay">Min Delay (minutes)</label>
+            <input id="cmMinDelay" type="text" placeholder="1">
+          </div>
+          <div class="field">
+            <label class="mini-lbl" for="cmMaxDelay">Max Delay (minutes)</label>
+            <input id="cmMaxDelay" type="text" placeholder="3">
+          </div>
+        </div>
+
+        <div class="frow" style="margin-top:6px">
+          <button id="saveCommentSettingsBtn" class="btn-primary" type="button">💾 Save Comment Settings</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="t-icon ti-violet">👤</div>
+            Account
+          </div>
+          <span class="active-badge">⚡ <span id="cmActiveName">—</span></span>
+        </div>
+        <div class="frow">
+          <select id="cmAccountSelect" style="flex:1;min-width:0"></select>
+        </div>
+        <div class="mono" style="font-size:11px;color:var(--muted-fg);margin-top:6px">
+          Comment runs under the selected account's session.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="frow" style="justify-content:space-between; margin-bottom:8px">
+          <div class="card-title" style="margin:0">
+            <div class="t-icon ti-green">📝</div>
+            Live Log
+          </div>
+          <label class="auto-scroll-ctrl" for="logAutoScroll2">
+            <input id="logAutoScroll2" type="checkbox" checked>
+            Auto Scroll
+          </label>
+        </div>
+        <div class="tbl-wrap log-wrap" id="cmLiveLogWrap">
+          <table class="log-table">
+            <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+            <tbody id="cmLiveLogsBody">
+              <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Commenter Controls + Groups -->
+    <section>
+      <div class="card">
+        <div class="card-title">
+          <div class="t-icon ti-pink">💬</div>
+          <span id="cmSelectedTitle">Select an account to start commenting</span>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-btns" id="cmActions">
+            <button type="button" id="startCommenterBtn" class="btn-green">▶️ Start Commenter</button>
+            <button type="button" id="stopCommenterBtn" class="btn-red">■ Stop Commenter</button>
+          </div>
+        </div>
+
+        <div id="cmStatusBox" class="settings-box" style="margin-top:10px">
+          <div class="mini-lbl">Commenter Status</div>
+          <div id="cmStatusInfo" class="mono" style="margin-top:4px">Idle — no commenter running.</div>
+        </div>
+      </div>
+
+      <div class="divider">
+        <div class="divider-label">
+          <div class="t-icon ti-violet" style="width:24px;height:24px;font-size:13px;box-shadow:2px 2px 0 var(--fg)">👥</div>
+          Comment Groups
+        </div>
+        <span class="pill p-violet" id="cmGroupCount" style="margin-left:auto">0 groups</span>
+      </div>
+
+      <div class="frow">
+        <input id="cmGroupFilter" type="text" placeholder="filter by id or name…" style="min-width:170px;flex:1;max-width:260px">
+        <select id="cmGroupStatusFilter">
+          <option value="all">All statuses</option>
+          <option value="enabled">Comment-enabled only</option>
+          <option value="disabled">Comment-disabled only</option>
+        </select>
+        <select id="cmGroupPerPage">
+          <option value="20">20 / page</option>
+          <option value="40">40 / page</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>URL</th><th>Comment</th><th>Toggle</th></tr></thead>
+          <tbody id="cmGroupsBody">
+            <tr><td colspan="5"><div class="empty"><span class="empty-ico">👥</span><span class="empty-txt">No groups loaded yet</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pager">
+        <button id="cmGroupPrevPage" type="button">← Prev</button>
+        <span id="cmGroupPageInfo" class="pager-info">Page 1 / 1</span>
+        <button id="cmGroupNextPage" type="button">Next →</button>
+      </div>
+
+    </section>
+  </div>
+  </div><!-- end tab-autocomment -->
+
 </div>
 
 <div id="toast" role="alert" aria-live="polite"></div>
@@ -2438,6 +2743,7 @@ def _render_page() -> str:
       const wrap = document.getElementById('liveLogWrap');
       wrap.scrollTop = wrap.scrollHeight;
     }
+    if (typeof syncCmLogs === 'function') syncCmLogs(rows);
   }
 
   function updatePostProgressFromLogs(rows) {
@@ -3066,6 +3372,10 @@ def _render_page() -> str:
       renderAccounts(data);
       renderGroups({ groups: groupsSnapshot });
       suppressUnsavedMark = false;
+      renderCommenterState(data);
+      renderCommentGroups(groupsSnapshot);
+      renderCommentSettings(data);
+      renderCmAccounts(data);
       setUpdated();
     } catch {
       document.getElementById('lastUpdated').textContent = 'Error';
@@ -3504,10 +3814,236 @@ def _render_page() -> str:
     ev.returnValue = 'You have unsaved preset changes.';
   });
 
+  // ─── Auto Comment Tab ────────────────────────────────────
+  let activeTab = 'autopost';
+  let cmGroupPage = 1;
+  let cmGroupsSnapshot = [];
+
+  function switchTab(name) {
+    activeTab = name;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      panel.classList.toggle('hidden', panel.id !== 'tab-' + name);
+    });
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  function renderCmAccounts(data) {
+    const accounts = data.accounts || [];
+    const active = data.active_account || '';
+    const sel = document.getElementById('cmAccountSelect');
+    const prev = sel.value;
+    sel.innerHTML = accounts.map(a =>
+      `<option value="${esc(a.id)}"${a.id === (selectedAccount || active) ? ' selected' : ''}>${esc(a.id)}</option>`
+    ).join('');
+    document.getElementById('cmActiveName').textContent = selectedAccount || active || '—';
+  }
+
+  function renderCommentSettings(data) {
+    const cfg = data.global_commenting || {};
+    const templates = data.templates || [];
+
+    const templateSel = document.getElementById('cmTemplateFile');
+    const currentTemplate = String(cfg.template_file || '').trim();
+    templateSel.innerHTML = templates.map(t =>
+      `<option value="${esc(t.template_file)}"${t.template_file === currentTemplate ? ' selected' : ''}>${esc(t.title || t.template_file)}</option>`
+    ).join('') || '<option value="">No templates available</option>';
+
+    const minEl = document.getElementById('cmMinDelay');
+    const maxEl = document.getElementById('cmMaxDelay');
+    if (document.activeElement !== minEl) minEl.value = cfg.min_delay_minutes ?? 1;
+    if (document.activeElement !== maxEl) maxEl.value = cfg.max_delay_minutes ?? 3;
+  }
+
+  function renderCommenterState(data) {
+    const ctrl = data.commenter_control || {};
+    const isActive = ctrl.is_active || false;
+    const status = (ctrl.status || 'idle').toLowerCase();
+    const msg = ctrl.message || '';
+    const acct = ctrl.account_id || '';
+
+    const statusInfo = document.getElementById('cmStatusInfo');
+    const title = document.getElementById('cmSelectedTitle');
+    const startBtn = document.getElementById('startCommenterBtn');
+    const stopBtn = document.getElementById('stopCommenterBtn');
+
+    if (title) {
+      if (isActive) {
+        title.textContent = `Commenter running — ${acct}`;
+      } else if (selectedAccount) {
+        title.textContent = `Commenter ready — ${selectedAccount}`;
+      } else {
+        title.textContent = 'Select an account to start commenting';
+      }
+    }
+
+    let statusText = '';
+    if (status === 'running') statusText = `▶️ Running — ${acct}`;
+    else if (status === 'stopping') statusText = `⏳ Stopping — ${acct}`;
+    else if (status === 'error') statusText = `❌ Error — ${msg}`;
+    else statusText = `Idle — no commenter running.`;
+    if (statusInfo) statusInfo.textContent = statusText;
+
+    if (startBtn) startBtn.disabled = isActive;
+    if (stopBtn) stopBtn.disabled = !isActive;
+  }
+
+  function cmResetGroupPaging() {
+    cmGroupPage = 1;
+  }
+
+  function renderCommentGroups(groups) {
+    cmGroupsSnapshot = groups || [];
+    const filter = (document.getElementById('cmGroupFilter').value || '').toLowerCase().trim();
+    const statusFilter = (document.getElementById('cmGroupStatusFilter').value || 'all');
+    const perPageRaw = (document.getElementById('cmGroupPerPage').value || '20');
+    const perPage = perPageRaw === 'all' ? Infinity : parseInt(perPageRaw, 10);
+
+    let filtered = cmGroupsSnapshot;
+    if (filter) {
+      filtered = filtered.filter(g =>
+        String(g.id || '').toLowerCase().includes(filter) ||
+        String(g.name || '').toLowerCase().includes(filter)
+      );
+    }
+    if (statusFilter === 'enabled') filtered = filtered.filter(g => g.comment_active);
+    if (statusFilter === 'disabled') filtered = filtered.filter(g => !g.comment_active);
+
+    const total = filtered.length;
+    const totalPages = perPage === Infinity ? 1 : Math.max(1, Math.ceil(total / perPage));
+    cmGroupPage = Math.min(cmGroupPage, totalPages);
+    const start = perPage === Infinity ? 0 : (cmGroupPage - 1) * perPage;
+    const page = perPage === Infinity ? filtered : filtered.slice(start, start + perPage);
+
+    document.getElementById('cmGroupCount').textContent = `${total} groups`;
+    document.getElementById('cmGroupPageInfo').textContent = `Page ${cmGroupPage} / ${totalPages}`;
+
+    const tbody = document.getElementById('cmGroupsBody');
+    if (!page.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><span class="empty-ico">👥</span><span class="empty-txt">No groups match filter</span></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = page.map(g => {
+      const active = g.comment_active;
+      const pill = active
+        ? '<span class="pill p-green">💬 On</span>'
+        : '<span class="pill p-gray">Off</span>';
+      const toggleBtn = active
+        ? `<button class="btn-red" style="padding:4px 10px;font-size:11px" onclick="toggleCommentGroup('exclude_comment_group','${esc(g.id)}')">Exclude</button>`
+        : `<button class="btn-green" style="padding:4px 10px;font-size:11px" onclick="toggleCommentGroup('include_comment_group','${esc(g.id)}')">Include</button>`;
+      return `<tr>
+        <td class="mono" style="font-size:11px">${esc(g.id)}</td>
+        <td>${esc(g.name)}</td>
+        <td class="mono" style="font-size:11px;word-break:break-all">${esc(g.url)}</td>
+        <td>${pill}</td>
+        <td>${toggleBtn}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function toggleCommentGroup(action, groupId) {
+    if (!selectedAccount) { toast('Select an account first.', true); return; }
+    await callAction(action, selectedAccount, groupId);
+  }
+
+  document.getElementById('cmGroupFilter').addEventListener('input', () => {
+    cmResetGroupPaging();
+    renderCommentGroups(groupsSnapshot);
+  });
+  document.getElementById('cmGroupStatusFilter').addEventListener('change', () => {
+    cmResetGroupPaging();
+    renderCommentGroups(groupsSnapshot);
+  });
+  document.getElementById('cmGroupPerPage').addEventListener('change', () => {
+    cmResetGroupPaging();
+    renderCommentGroups(groupsSnapshot);
+  });
+  document.getElementById('cmGroupPrevPage').addEventListener('click', () => {
+    cmGroupPage = Math.max(1, cmGroupPage - 1);
+    renderCommentGroups(groupsSnapshot);
+  });
+  document.getElementById('cmGroupNextPage').addEventListener('click', () => {
+    cmGroupPage += 1;
+    renderCommentGroups(groupsSnapshot);
+  });
+
+  document.getElementById('cmAccountSelect').addEventListener('change', ev => {
+    const v = (ev.target.value || '').trim();
+    if (v) {
+      selectedAccount = v;
+      cmResetGroupPaging();
+      loadState();
+    }
+  });
+
+  document.getElementById('startCommenterBtn').addEventListener('click', async () => {
+    const acct = selectedAccount || (document.getElementById('cmAccountSelect').value || '').trim();
+    if (!acct) { toast('Select an account first.', true); return; }
+    await callAction('start_commenter', acct);
+  });
+
+  document.getElementById('stopCommenterBtn').addEventListener('click', async () => {
+    const acct = selectedAccount || (document.getElementById('cmAccountSelect').value || '').trim();
+    await callAction('stop_commenter', acct);
+  });
+
+  document.getElementById('saveCommentSettingsBtn').addEventListener('click', async () => {
+    const templateFile = (document.getElementById('cmTemplateFile').value || '').trim();
+    const minDelay = parseInt((document.getElementById('cmMinDelay').value || '').trim(), 10);
+    const maxDelay = parseInt((document.getElementById('cmMaxDelay').value || '').trim(), 10);
+    if (!templateFile) { toast('Select a template.', true); return; }
+    if (isNaN(minDelay) || isNaN(maxDelay)) { toast('Delay values must be integers.', true); return; }
+    if (minDelay > maxDelay) { toast('Min delay cannot exceed max delay.', true); return; }
+    await callAction('update_commenting_rules', selectedAccount || '', '', '', { template_file: templateFile, min_delay_minutes: minDelay, max_delay_minutes: maxDelay });
+  });
+
+  function initCmLogAutoScroll() {
+    const key = 'fbpost.cmLogAutoScroll';
+    const input = document.getElementById('logAutoScroll2');
+    if (!input) return;
+    const saved = localStorage.getItem(key);
+    input.checked = saved === null ? true : saved === 'true';
+    input.addEventListener('change', () => {
+      localStorage.setItem(key, input.checked ? 'true' : 'false');
+      if (input.checked) {
+        const wrap = document.getElementById('cmLiveLogWrap');
+        if (wrap) wrap.scrollTop = wrap.scrollHeight;
+      }
+    });
+  }
+
+  function syncCmLogs(rows) {
+    const tbody = document.getElementById('cmLiveLogsBody');
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><span class="empty-ico">🫙</span><span class="empty-txt">No logs yet</span></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(item => {
+      const level = String(item.level || 'INFO').toUpperCase();
+      return `<tr>
+        <td class="mono">${esc(formatLogTime(item.timestamp))}</td>
+        <td><span class="pill ${level === 'ERROR' ? 'p-orange' : 'p-gray'}">${esc(level)}</span></td>
+        <td>${esc(item.message || '')}</td>
+      </tr>`;
+    }).join('');
+    const input = document.getElementById('logAutoScroll2');
+    if (input && input.checked) {
+      const wrap = document.getElementById('cmLiveLogWrap');
+      if (wrap) wrap.scrollTop = wrap.scrollHeight;
+    }
+  }
+
   document.getElementById('schTimezone').value = 'Asia/Jakarta';
   updateScheduleTypeVisibility();
   lastScheduleSpecSignature = '';
   initLogAutoScrollSetting();
+  initCmLogAutoScroll();
   loadState();
   loadLogs();
   setInterval(() => {
@@ -3582,6 +4118,12 @@ def _execute_account_action(
       return _update_groups_rules(config_path, groups_rules or {})
     if action == "update_posting_rules":
       return _update_posting_rules(config_path, posting_rules or {})
+    if action == "update_commenting_rules":
+      return _update_commenting_rules(config_path, template_data or {})
+    if action == "include_comment_group":
+      return set_group_comment_included(config_path, account_id, group_id, True)
+    if action == "exclude_comment_group":
+      return set_group_comment_included(config_path, account_id, group_id, False)
 
     # Preset actions
     if action == "list_presets":
@@ -3695,7 +4237,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
             with state.lock:
               runner_state = state.snapshot_runner(selected_account)
               schedule_state = state.snapshot_schedule(selected_account)
-            payload = _build_state(state.config_path, selected_account, runner_state, schedule_state)
+              commenter_state = state.snapshot_commenter(selected_account)
+            payload = _build_state(state.config_path, selected_account, runner_state, schedule_state, commenter_state)
             self._send_json({"ok": True, "data": payload, **payload})
             return
           if parsed.path == "/api/logs":
@@ -3740,6 +4283,7 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   "update_browser_rules",
                   "update_groups_rules",
                   "update_posting_rules",
+                  "update_commenting_rules",
                   "list_presets",
                   "save_preset",
                   "update_preset",
@@ -3749,6 +4293,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   "start_schedule",
                   "stop_schedule",
                   "delete_schedule",
+                  "start_commenter",
+                  "stop_commenter",
                 }
                 if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
@@ -3776,6 +4322,10 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                     ok, result = state.resume_run(account_id)
                   elif action == "stop_run":
                     ok, result = state.stop_run(account_id)
+                  elif action == "start_commenter":
+                    ok, result = state.start_commenter(account_id)
+                  elif action == "stop_commenter":
+                    ok, result = state.stop_commenter(account_id)
                   else:
                     ok, result = _execute_account_action(
                       state.config_path,
@@ -3791,8 +4341,9 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
 
                   runner_state = state.snapshot_runner(account_id or None)
                   schedule_state = state.snapshot_schedule(account_id or None)
+                  commenter_state = state.snapshot_commenter(account_id or None)
 
-                state_payload = _build_state(state.config_path, account_id or None, runner_state, schedule_state)
+                state_payload = _build_state(state.config_path, account_id or None, runner_state, schedule_state, commenter_state)
                 if ok:
                     self._send_json({"ok": True, "message": result, "state": state_payload})
                 else:

@@ -15,10 +15,11 @@ A local automation tool for digital product sellers to automate posting promotio
 
 ```
 main.py                  # Entry point (CLI + Web UI)
-config.yaml              # Global config and accounts
+config.yaml              # Global config and accounts (includes commenting: section)
 requirements.txt         # Python dependencies
 core/                    # Application logic
-  account_manager.py     # Multi-account CRUD
+  account_manager.py     # Multi-account CRUD + group comment toggles
+  auto_commenter.py      # Auto Comment engine (sequential, browser stays open)
   config_loader.py       # YAML config parsing
   group_scraper.py       # Facebook group scraping
   logger.py              # Structured logging
@@ -26,9 +27,11 @@ core/                    # Application logic
   preset_manager.py      # Preset management
   scheduler.py           # Posting scheduler and delay engine
   session_manager.py     # Browser session/cookie persistence
-  web_ui.py              # Control panel HTTP server + API
+  web_ui.py              # Control panel HTTP server + API (tabs: Auto Post, Auto Comment)
 data/                    # Dynamic data (accounts, sessions, logs)
-templates/               # Post content templates (YAML + images)
+  accounts/<id>/
+    comment_log.json     # {group_id: last_commented_post_id} for duplicate prevention
+templates/               # Post content templates (YAML + images), shared by post + comment
 logs/                    # Global system logs and screenshots
 ```
 
@@ -46,9 +49,12 @@ The control panel is available at port 5000.
 
 - Anti-detection browser automation via Camoufox
 - Multi-account support with isolated sessions and group lists
-- Web control panel for managing accounts, groups, schedules, and templates
-- Dry-run mode for testing without actually posting
-- Real-time log streaming in the dashboard
+- Web control panel with two tabs: Auto Post and Auto Comment
+- **Auto Post:** Template-based posting, dry-run mode, scheduler, preset management
+- **Auto Comment:** Continuous background commenter — visits each comment-enabled group, comments on the latest post (skips if already commented), configurable delay between groups
+- Comment duplicate prevention via `comment_log.json` (`{group_id: last_post_id}`)
+- Each tab shares accounts and live logs; Auto Comment has its own group toggles (`comment_active` field) and comment settings
+- Real-time log streaming in both tabs
 
 ## CLI Options
 

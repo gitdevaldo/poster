@@ -263,3 +263,40 @@ def set_group_included(config_path: Path, account_id: str, group_id: str, includ
     groups_path.parent.mkdir(parents=True, exist_ok=True)
     groups_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     return True, f"Group '{target_id}' {'included' if included else 'excluded'}."
+
+
+def set_group_comment_included(
+    config_path: Path, account_id: str, group_id: str, included: bool
+) -> tuple[bool, str]:
+    """Set the comment_active flag on a group (separate from the posting active flag)."""
+    groups_path = _groups_path_for_account(config_path, account_id)
+    if groups_path is None:
+        return False, f"Account '{account_id}' not found."
+
+    if not groups_path.exists():
+        return False, f"Groups file not found for account '{account_id}'."
+
+    try:
+        raw = json.loads(groups_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False, f"Invalid groups data for account '{account_id}'."
+
+    if not isinstance(raw, list):
+        return False, f"Invalid groups data for account '{account_id}'."
+
+    target_id = str(group_id).strip()
+    updated = False
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id", "")).strip() == target_id:
+            item["comment_active"] = bool(included)
+            updated = True
+            break
+
+    if not updated:
+        return False, f"Group '{target_id}' not found."
+
+    groups_path.parent.mkdir(parents=True, exist_ok=True)
+    groups_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True, f"Group '{target_id}' comment {'enabled' if included else 'disabled'}."
