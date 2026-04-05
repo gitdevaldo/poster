@@ -9,13 +9,13 @@ from typing import Any
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
 from core.session_manager import (
-    camoufox_kwargs,
+    apply_session_cookies,
+    camoufox_scrape_kwargs,
     configure_page_window,
     ensure_logged_in_in_page,
     ensure_session,
     get_or_create_page,
     load_session_data,
-    maybe_apply_session_cookies,
     save_session_from_page,
 )
 
@@ -411,7 +411,7 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
     min_expected_groups = int(scrape_cfg.get("min_expected_groups", 10))
     group_feed_url = "https://www.facebook.com/groups/feed/"
 
-    kwargs = camoufox_kwargs(config)
+    kwargs = camoufox_scrape_kwargs(config)
 
     log_event("Scraping joined Facebook groups.")
     scraped_groups: list[dict[str, str]] = []
@@ -420,7 +420,10 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
         with Camoufox(**kwargs) as browser:
             page = get_or_create_page(browser)
             configure_page_window(page, config)
-            maybe_apply_session_cookies(page, session_data, config)
+            # Always inject cookies from session.json into the scrape profile so
+            # it is authenticated even when the posting browser is running and
+            # holds the lock on the main persistent profile.
+            apply_session_cookies(page, session_data)
             ensure_logged_in_in_page(page, config, session_path)
             page.goto(group_list_url, wait_until="domcontentloaded")
             page.wait_for_timeout(2500)

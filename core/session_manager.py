@@ -32,6 +32,16 @@ def _persistent_profile_dir_from_config(config: dict[str, Any]) -> Path:
     return Path(profile_dir)
 
 
+def _scrape_profile_dir_from_config(config: dict[str, Any]) -> Path:
+    """Returns a separate profile directory used exclusively for scraping/validation.
+
+    This prevents profile-lock conflicts when the posting browser is already
+    running (Firefox allows only one process per profile directory at a time).
+    """
+    base = _persistent_profile_dir_from_config(config)
+    return base.parent / (base.name + "_scrape")
+
+
 def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     browser_cfg = config.get("browser", {})
     camoufox_cfg = config.get("camoufox", {})
@@ -71,6 +81,23 @@ def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
             "password": str(proxy_cfg.get("password", "")),
         }
 
+    return kwargs
+
+
+def camoufox_scrape_kwargs(config: dict[str, Any]) -> dict[str, Any]:
+    """Camoufox kwargs for scraping/validation — uses a separate profile directory.
+
+    The posting browser owns the main persistent profile. This variant points to
+    a sibling directory so both browsers can run concurrently without hitting
+    Firefox's single-process profile lock.
+
+    Session cookies from session.json are injected at runtime (cookie overlay),
+    so the scrape browser is authenticated without needing the posting profile.
+    """
+    kwargs = camoufox_kwargs(config)
+    scrape_profile_dir = _scrape_profile_dir_from_config(config)
+    scrape_profile_dir.mkdir(parents=True, exist_ok=True)
+    kwargs["user_data_dir"] = str(scrape_profile_dir)
     return kwargs
 
 
@@ -346,14 +373,16 @@ def validate_session(config_path: Path) -> bool:
     session_data = load_session_data(session_path)
 
     Camoufox = _optional_import_camoufox()
-    kwargs = camoufox_kwargs(config)
+    # Use the scrape-specific profile so this can run concurrently with the
+    # posting browser without hitting the Firefox single-process profile lock.
+    kwargs = camoufox_scrape_kwargs(config)
     home_url = _home_url(config)
 
     try:
         with Camoufox(**kwargs) as browser:
             page = get_or_create_page(browser)
             configure_page_window(page, config)
-            maybe_apply_session_cookies(page, session_data, config)
+            apply_session_cookies(page, session_data)
             page.goto(home_url, wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
             valid = is_logged_in(page)
