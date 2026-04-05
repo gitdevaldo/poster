@@ -1,0 +1,29 @@
+16:32:45	INFO	Force group scrape requested; bypassing freshness gate. — rescrape_every_days: 7
+16:34:27	INFO	Force group scrape requested; bypassing freshness gate. — rescrape_every_days: 7
+16:34:28	INFO	Reusing existing session without pre-validation.
+16:34:28	INFO	Scraping joined Facebook groups.
+16:34:28	INFO	Copying persistent profile for scrape browser. — source: data/accounts/account-1/camoufox_profile — dest: data/accounts/account-1/camoufox_profile_tmp_scrape
+16:34:29	INFO	Removed temporary scrape profile copy.
+16:34:29	ERROR	Failed during group scraping. — Error: Error — Detail: BrowserType.launch_persistent_context: Failed to launch the browser process.
+Browser logs:
+
+<launching> /home/runner/workspace/.cache/camoufox/camoufox-bin -no-remote -headless -profile /home/runner/workspace/data/accounts/account-1/camoufox_profile_tmp_scrape -juggler-pipe about:blank
+<launched> pid=6900
+[pid=6900][err] XPCOMGlueLoad error for file /home/runner/workspace/.cache/camoufox/libmozgtk.so:
+[pid=6900][err] libgtk-3.so.0: cannot open shared object file: No such file or directory
+[pid=6900][err] Couldn't load XPCOM.
+[pid=6900] <process did exit: exitCode=255, signal=null>
+[pid=6900] starting temporary directories cleanup
+Call log:
+- <launching> /home/runner/workspace/.cache/camoufox/camoufox-bin -no-remote -headless -profile /home/runner/workspace/data/accounts/account-1/camoufox_profile_tmp_scrape -juggler-pipe about:blank
+- <launched> pid=6900
+- [pid=6900][err] XPCOMGlueLoad error for file /home/runner/workspace/.cache/camoufox/libmozgtk.so:
+- [pid=6900][err] libgtk-3.so.0: cannot open shared object file: No such file or directory
+- [pid=6900][err] Couldn't load XPCOM.
+- [pid=6900] <process did exit: exitCode=255, signal=null>
+- [pid=6900] starting temporary directories cleanup
+- [pid=6900] <gracefully close start>
+- [pid=6900] <kill>
+- [pid=6900] <skipped force kill spawnedProcess.killed=false processClosed=true>
+- [pid=6900] finished temporary directories cleanup
+- [pid=6900] <gracefully close end>
