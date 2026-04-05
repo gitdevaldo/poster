@@ -1967,94 +1967,72 @@ def _render_page() -> str:
     <button class="tab-btn" data-tab="autocomment">💬 Auto Comment</button>
   </div>
 
+<div class="main-grid">
+
+  <!-- ═══ SHARED SIDEBAR — always visible regardless of active tab ═══ -->
+  <aside>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="t-icon ti-yellow">📋</div>
+          Presets
+        </div>
+        <span id="presetUnsavedBadge" class="pill p-orange" style="display:none">Unsaved changes</span>
+      </div>
+      <div class="preset-inline">
+        <select id="presetSelect" title="Select preset" aria-label="Select preset"></select>
+        <button id="saveNewPresetBtn" class="btn-primary" type="button" title="Save new preset" aria-label="Save new preset">💾</button>
+        <button id="updatePresetBtn" class="btn-yellow" type="button" title="Update selected preset" aria-label="Update selected preset">📝</button>
+        <button id="deletePresetBtn" class="btn-red" type="button" title="Delete selected preset" aria-label="Delete selected preset">🗑️</button>
+      </div>
+      <div id="presetInfo" class="mono" style="display:none"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="t-icon ti-violet">👤</div>
+          Accounts
+        </div>
+        <span class="active-badge">⚡ <span id="activeName">—</span></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-n" id="statTotal">0</div><div class="stat-l">Total</div></div>
+        <div class="stat"><div class="stat-n" style="color:var(--green)" id="statEnabled">0</div><div class="stat-l">On</div></div>
+        <div class="stat"><div class="stat-n" style="color:var(--pink)"  id="statDisabled">0</div><div class="stat-l">Off</div></div>
+      </div>
+      <div class="frow">
+        <select id="accountSelect" style="flex:1;min-width:0"></select>
+      </div>
+      <div class="frow">
+        <input id="newAccountId" type="text" placeholder="new-account-id" style="flex:1;min-width:0">
+        <button id="addAccountBtn" class="btn-primary" type="button">＋ Add</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Account</th><th>State</th><th>Actions</th></tr></thead>
+          <tbody id="accountsBody">
+            <tr><td colspan="3"><div class="empty"><span class="empty-ico">⏳</span><span class="empty-txt">Loading…</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="settings-box">
+        <div class="mini-lbl">Global Settings</div>
+        <div class="frow" style="margin:0;justify-content:center;flex-wrap:wrap;gap:6px">
+          <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
+          <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
+          <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
+          <button id="openCommentRulesBtn" type="button" style="background:#7c3aed;color:#fff;border:2px solid var(--fg);border-radius:8px;padding:6px 12px;font-family:var(--heading);font-weight:700;font-size:13px;cursor:pointer">💬 Comment Rules</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ TAB PANELS — right column, switches with tab ═══ -->
+  <div style="min-width:0">
+
+  <!-- ─── AUTO POST TAB ─── -->
   <div id="tab-autopost" class="tab-panel">
-  <div class="main-grid">
-
-    <!-- Presets + Accounts -->
-    <aside>
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-title" style="justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="t-icon ti-yellow">📋</div>
-            Presets
-          </div>
-          <span id="presetUnsavedBadge" class="pill p-orange" style="display:none">Unsaved changes</span>
-        </div>
-
-        <div class="preset-inline">
-          <select id="presetSelect" title="Select preset" aria-label="Select preset"></select>
-          <button id="saveNewPresetBtn" class="btn-primary" type="button" title="Save new preset" aria-label="Save new preset">💾</button>
-          <button id="updatePresetBtn" class="btn-yellow" type="button" title="Update selected preset" aria-label="Update selected preset">📝</button>
-          <button id="deletePresetBtn" class="btn-red" type="button" title="Delete selected preset" aria-label="Delete selected preset">🗑️</button>
-        </div>
-
-        <div id="presetInfo" class="mono" style="display:none"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title" style="justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="t-icon ti-violet">👤</div>
-            Accounts
-          </div>
-          <span class="active-badge">⚡ <span id="activeName">—</span></span>
-        </div>
-
-        <div class="stats">
-          <div class="stat"><div class="stat-n" id="statTotal">0</div><div class="stat-l">Total</div></div>
-          <div class="stat"><div class="stat-n" style="color:var(--green)" id="statEnabled">0</div><div class="stat-l">On</div></div>
-          <div class="stat"><div class="stat-n" style="color:var(--pink)"  id="statDisabled">0</div><div class="stat-l">Off</div></div>
-        </div>
-
-        <div class="frow">
-          <select id="accountSelect" style="flex:1;min-width:0"></select>
-        </div>
-
-        <div class="frow">
-          <input id="newAccountId" type="text" placeholder="new-account-id" style="flex:1;min-width:0">
-          <button id="addAccountBtn" class="btn-primary" type="button">＋ Add</button>
-        </div>
-
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Account</th><th>State</th><th>Actions</th></tr></thead>
-            <tbody id="accountsBody">
-              <tr><td colspan="3"><div class="empty"><span class="empty-ico">⏳</span><span class="empty-txt">Loading…</span></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="settings-box">
-          <div class="mini-lbl">Global Settings</div>
-          <div class="frow" style="margin:0;justify-content:center">
-            <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
-            <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
-            <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <div class="frow" style="justify-content:space-between; margin-bottom:8px">
-          <div class="card-title" style="margin:0">
-            <div class="t-icon ti-green">📝</div>
-            Live Log
-          </div>
-          <label class="auto-scroll-ctrl" for="logAutoScroll">
-            <input id="logAutoScroll" type="checkbox" checked>
-            Auto Scroll
-          </label>
-        </div>
-        <div class="tbl-wrap log-wrap" id="liveLogWrap">
-          <table class="log-table">
-            <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
-            <tbody id="liveLogsBody">
-              <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </aside>
 
     <!-- Actions + Groups -->
     <section>
@@ -2169,149 +2147,112 @@ def _render_page() -> str:
 
       </div>
     </section>
-  </div>
-  </div><!-- end tab-autopost -->
 
-  <!-- ═══════════════ AUTO COMMENT TAB ═══════════════ -->
-  <div id="tab-autocomment" class="tab-panel hidden">
-  <div class="main-grid">
-
-    <!-- Comment Settings + Shared Account Info -->
-    <aside>
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-title">
-          <div class="t-icon ti-yellow">💬</div>
-          Comment Settings
+    <!-- ─── Auto Post Live Log ─── -->
+    <div class="card" style="margin-top:14px">
+      <div class="frow" style="justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="margin:0">
+          <div class="t-icon ti-green">📝</div>
+          Live Log — Auto Post
         </div>
-
-        <div class="field">
-          <label class="mini-lbl">Post Template to Comment From</label>
-          <div style="display:flex;align-items:stretch;gap:8px">
-            <div id="cmTemplateDisplay" style="flex:1;background:var(--bg,#fafaf8);border:1px solid var(--border,#e0dcd5);border-radius:8px;padding:6px 10px;min-height:36px;display:flex;flex-direction:column;justify-content:center;cursor:default">
-              <span id="cmTemplateName" style="font-weight:700;font-size:13px;line-height:1.3">—</span>
-              <span class="mono" id="cmTemplateFileLabel" style="color:var(--muted,#aaa);font-size:11px;line-height:1.3">—</span>
-            </div>
-            <button type="button" id="openCommentTemplateBtn" class="btn-primary" style="white-space:nowrap;flex-shrink:0;padding:0 14px">🧩 Choose</button>
-          </div>
-        </div>
-
-        <div class="frow" style="margin-top:8px">
-          <div class="field">
-            <label class="mini-lbl" for="cmMinDelay">Min Delay (minutes)</label>
-            <input id="cmMinDelay" type="text" placeholder="1">
-          </div>
-          <div class="field">
-            <label class="mini-lbl" for="cmMaxDelay">Max Delay (minutes)</label>
-            <input id="cmMaxDelay" type="text" placeholder="3">
-          </div>
-        </div>
-
-        <div class="frow" style="margin-top:6px">
-          <button id="saveCommentSettingsBtn" class="btn-primary" type="button">💾 Save Comment Settings</button>
-        </div>
+        <label class="auto-scroll-ctrl" for="logAutoScroll">
+          <input id="logAutoScroll" type="checkbox" checked>
+          Auto Scroll
+        </label>
       </div>
-
-      <div class="card">
-        <div class="card-title" style="justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="t-icon ti-violet">👤</div>
-            Account
-          </div>
-          <span class="active-badge">⚡ <span id="cmActiveName">—</span></span>
-        </div>
-        <div class="frow">
-          <select id="cmAccountSelect" style="flex:1;min-width:0"></select>
-        </div>
-        <div class="mono" style="font-size:11px;color:var(--muted-fg);margin-top:6px">
-          Comment runs under the selected account's session.
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <div class="frow" style="justify-content:space-between; margin-bottom:8px">
-          <div class="card-title" style="margin:0">
-            <div class="t-icon ti-green">📝</div>
-            Live Log
-          </div>
-          <label class="auto-scroll-ctrl" for="logAutoScroll2">
-            <input id="logAutoScroll2" type="checkbox" checked>
-            Auto Scroll
-          </label>
-        </div>
-        <div class="tbl-wrap log-wrap" id="cmLiveLogWrap">
-          <table class="log-table">
-            <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
-            <tbody id="cmLiveLogsBody">
-              <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Commenter Controls + Groups -->
-    <section>
-      <div class="card">
-        <div class="card-title">
-          <div class="t-icon ti-pink">💬</div>
-          <span id="cmSelectedTitle">Select an account to start commenting</span>
-        </div>
-
-        <div class="toolbar">
-          <div class="toolbar-btns" id="cmActions">
-            <button type="button" id="startCommenterBtn" class="btn-green">▶️ Start Commenter</button>
-            <button type="button" id="stopCommenterBtn" class="btn-red">■ Stop Commenter</button>
-          </div>
-        </div>
-
-        <div id="cmStatusBox" class="settings-box" style="margin-top:10px">
-          <div class="mini-lbl">Commenter Status</div>
-          <div id="cmStatusInfo" class="mono" style="margin-top:4px">Idle — no commenter running.</div>
-        </div>
-      </div>
-
-      <div class="divider">
-        <div class="divider-label">
-          <div class="t-icon ti-violet" style="width:24px;height:24px;font-size:13px;box-shadow:2px 2px 0 var(--fg)">👥</div>
-          Comment Groups
-        </div>
-        <span class="pill p-violet" id="cmGroupCount" style="margin-left:auto">0 groups</span>
-      </div>
-
-      <div class="frow">
-        <input id="cmGroupFilter" type="text" placeholder="filter by id or name…" style="min-width:170px;flex:1;max-width:260px">
-        <select id="cmGroupStatusFilter">
-          <option value="all">All statuses</option>
-          <option value="enabled">Comment-enabled only</option>
-          <option value="disabled">Comment-disabled only</option>
-        </select>
-        <select id="cmGroupPerPage">
-          <option value="20">20 / page</option>
-          <option value="40">40 / page</option>
-          <option value="all">All</option>
-        </select>
-      </div>
-
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>ID</th><th>Name</th><th>URL</th><th>Comment</th><th>Toggle</th></tr></thead>
-          <tbody id="cmGroupsBody">
-            <tr><td colspan="5"><div class="empty"><span class="empty-ico">👥</span><span class="empty-txt">No groups loaded yet</span></div></td></tr>
+      <div class="tbl-wrap log-wrap" id="liveLogWrap">
+        <table class="log-table">
+          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+          <tbody id="liveLogsBody">
+            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
           </tbody>
         </table>
       </div>
+    </div>
+  </div><!-- end tab-autopost -->
 
-      <div class="pager">
-        <button id="cmGroupPrevPage" type="button">← Prev</button>
-        <span id="cmGroupPageInfo" class="pager-info">Page 1 / 1</span>
-        <button id="cmGroupNextPage" type="button">Next →</button>
+  <!-- ─── AUTO COMMENT TAB ─── -->
+  <div id="tab-autocomment" class="tab-panel hidden">
+    <div class="card">
+      <div class="card-title">
+        <div class="t-icon ti-pink">💬</div>
+        <span id="cmSelectedTitle">Select an account to start commenting</span>
       </div>
+      <div class="toolbar">
+        <div class="toolbar-btns" id="cmActions">
+          <button type="button" id="startCommenterBtn" class="btn-green">▶️ Start Commenter</button>
+          <button type="button" id="stopCommenterBtn" class="btn-red">■ Stop Commenter</button>
+        </div>
+      </div>
+      <div id="cmStatusBox" class="settings-box" style="margin-top:10px">
+        <div class="mini-lbl">Commenter Status</div>
+        <div id="cmStatusInfo" class="mono" style="margin-top:4px">Idle — no commenter running.</div>
+      </div>
+    </div>
 
-    </section>
-  </div>
+    <!-- ─── Auto Comment Live Log ─── -->
+    <div class="card" style="margin-top:14px">
+      <div class="frow" style="justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="margin:0">
+          <div class="t-icon ti-green">📝</div>
+          Live Log — Auto Comment
+        </div>
+        <label class="auto-scroll-ctrl" for="logAutoScroll2">
+          <input id="logAutoScroll2" type="checkbox" checked>
+          Auto Scroll
+        </label>
+      </div>
+      <div class="tbl-wrap log-wrap" id="cmLiveLogWrap">
+        <table class="log-table">
+          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+          <tbody id="cmLiveLogsBody">
+            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── Comment Groups ─── -->
+    <div class="divider">
+      <div class="divider-label">
+        <div class="t-icon ti-violet" style="width:24px;height:24px;font-size:13px;box-shadow:2px 2px 0 var(--fg)">👥</div>
+        Comment Groups
+      </div>
+      <span class="pill p-violet" id="cmGroupCount" style="margin-left:auto">0 groups</span>
+    </div>
+
+    <div class="frow">
+      <input id="cmGroupFilter" type="text" placeholder="filter by id or name…" style="min-width:170px;flex:1;max-width:260px">
+      <select id="cmGroupStatusFilter">
+        <option value="all">All statuses</option>
+        <option value="enabled">Comment-enabled only</option>
+        <option value="disabled">Comment-disabled only</option>
+      </select>
+      <select id="cmGroupPerPage">
+        <option value="20">20 / page</option>
+        <option value="40">40 / page</option>
+        <option value="all">All</option>
+      </select>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>URL</th><th>Comment</th><th>Toggle</th></tr></thead>
+        <tbody id="cmGroupsBody">
+          <tr><td colspan="5"><div class="empty"><span class="empty-ico">👥</span><span class="empty-txt">No groups loaded yet</span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <button id="cmGroupPrevPage" type="button">← Prev</button>
+      <span id="cmGroupPageInfo" class="pager-info">Page 1 / 1</span>
+      <button id="cmGroupNextPage" type="button">Next →</button>
+    </div>
   </div><!-- end tab-autocomment -->
 
-</div>
+  </div><!-- end tab-panels col -->
+</div><!-- end main-grid -->
 
 <div id="toast" role="alert" aria-live="polite"></div>
 
@@ -2547,6 +2488,43 @@ def _render_page() -> str:
   </div>
 </div>
 
+<div id="commentRulesModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="commentRulesModalTitle">
+    <div class="modal-head">
+      <div class="card-title" style="margin:0">
+        <div class="t-icon ti-violet">💬</div>
+        <span id="commentRulesModalTitle">Global Comment Rules</span>
+      </div>
+      <button id="closeCommentRulesModal" type="button">✕ Close</button>
+    </div>
+    <div class="preview-box" style="margin-top:0">
+      <div class="field">
+        <label class="mini-lbl">Post Template to Comment From</label>
+        <div style="display:flex;align-items:stretch;gap:8px">
+          <div id="cmTemplateDisplay" style="flex:1;background:var(--bg,#fafaf8);border:1px solid var(--border,#e0dcd5);border-radius:8px;padding:6px 10px;min-height:36px;display:flex;flex-direction:column;justify-content:center;cursor:default">
+            <span id="cmTemplateName" style="font-weight:700;font-size:13px;line-height:1.3">—</span>
+            <span class="mono" id="cmTemplateFileLabel" style="color:var(--muted,#aaa);font-size:11px;line-height:1.3">—</span>
+          </div>
+          <button type="button" id="openCommentTemplateBtn" class="btn-primary" style="white-space:nowrap;flex-shrink:0;padding:0 14px">🧩 Choose</button>
+        </div>
+      </div>
+      <div class="frow" style="margin-top:12px">
+        <div class="field">
+          <label class="mini-lbl" for="cmMinDelay">Min Delay (minutes)</label>
+          <input id="cmMinDelay" type="text" placeholder="1">
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="cmMaxDelay">Max Delay (minutes)</label>
+          <input id="cmMaxDelay" type="text" placeholder="3">
+        </div>
+      </div>
+      <div class="frow" style="margin-top:12px">
+        <button id="saveCommentSettingsBtn" class="btn-primary" type="button">💾 Save Comment Rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="runLiveModal" class="modal-backdrop" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" style="max-width:420px">
     <div class="modal-head">
@@ -2634,6 +2612,8 @@ def _render_page() -> str:
   let groupsSnapshot = [];
   let logsSnapshot = [];
   let templatesSnapshot = [];
+  let lastTemplatesSnapshot = [];
+  let lastCommentingConfig = {};
   let browserRulesSnapshot = {};
   let globalGroupsSnapshot = {};
   let globalPostingSnapshot = {};
@@ -2960,6 +2940,21 @@ def _render_page() -> str:
 
   function closePostingRulesModal() {
     document.getElementById('postingRulesModal').classList.remove('show');
+  }
+
+  function openCommentRulesModal() {
+    const cfg = lastCommentingConfig || {};
+    const templates = lastTemplatesSnapshot || [];
+    // Pre-fill delay inputs from last known state
+    const minEl = document.getElementById('cmMinDelay');
+    const maxEl = document.getElementById('cmMaxDelay');
+    if (minEl) minEl.value = cfg.min_delay_minutes ?? 1;
+    if (maxEl) maxEl.value = cfg.max_delay_minutes ?? 3;
+    document.getElementById('commentRulesModal').classList.add('show');
+  }
+
+  function closeCommentRulesModal() {
+    document.getElementById('commentRulesModal').classList.remove('show');
   }
 
   function closeTemplateEditorModal() {
@@ -3396,7 +3391,6 @@ def _render_page() -> str:
       renderCommenterState(data);
       renderCommentGroups(groupsSnapshot);
       renderCommentSettings(data);
-      renderCmAccounts(data);
       setUpdated();
     } catch {
       document.getElementById('lastUpdated').textContent = 'Error';
@@ -3869,21 +3863,14 @@ def _render_page() -> str:
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  function renderCmAccounts(data) {
-    const accounts = data.accounts || [];
-    const active = data.active_account || '';
-    const sel = document.getElementById('cmAccountSelect');
-    const prev = sel.value;
-    sel.innerHTML = accounts.map(a =>
-      `<option value="${esc(a.id)}"${a.id === (selectedAccount || active) ? ' selected' : ''}>${esc(a.id)}</option>`
-    ).join('');
-    document.getElementById('cmActiveName').textContent = selectedAccount || active || '—';
-  }
-
   function renderCommentSettings(data) {
     const cfg = data.global_commenting || {};
     const templates = data.templates || [];
     const currentFile = String(cfg.template_file || '').trim();
+
+    // Keep cached copies for the modal pre-fill
+    lastCommentingConfig = cfg;
+    lastTemplatesSnapshot = templates;
 
     // Update selectedCommentTemplate (but don't overwrite if modal is open in comment mode)
     if (templateModalContext !== 'comment') {
@@ -4015,13 +4002,10 @@ def _render_page() -> str:
     renderCommentGroups(groupsSnapshot);
   });
 
-  document.getElementById('cmAccountSelect').addEventListener('change', ev => {
-    const v = (ev.target.value || '').trim();
-    if (v) {
-      selectedAccount = v;
-      cmResetGroupPaging();
-      loadState();
-    }
+  document.getElementById('openCommentRulesBtn').addEventListener('click', openCommentRulesModal);
+  document.getElementById('closeCommentRulesModal').addEventListener('click', closeCommentRulesModal);
+  document.getElementById('commentRulesModal').addEventListener('click', ev => {
+    if (ev.target && ev.target.id === 'commentRulesModal') closeCommentRulesModal();
   });
 
   document.getElementById('openCommentTemplateBtn').addEventListener('click', () => {
@@ -4029,14 +4013,12 @@ def _render_page() -> str:
   });
 
   document.getElementById('startCommenterBtn').addEventListener('click', async () => {
-    const acct = selectedAccount || (document.getElementById('cmAccountSelect').value || '').trim();
-    if (!acct) { toast('Select an account first.', true); return; }
-    await callAction('start_commenter', acct);
+    if (!selectedAccount) { toast('Select an account from the sidebar first.', true); return; }
+    await callAction('start_commenter', selectedAccount);
   });
 
   document.getElementById('stopCommenterBtn').addEventListener('click', async () => {
-    const acct = selectedAccount || (document.getElementById('cmAccountSelect').value || '').trim();
-    await callAction('stop_commenter', acct);
+    await callAction('stop_commenter', selectedAccount || '');
   });
 
   document.getElementById('saveCommentSettingsBtn').addEventListener('click', async () => {
@@ -4046,6 +4028,7 @@ def _render_page() -> str:
     if (isNaN(minDelay) || isNaN(maxDelay)) { toast('Delay values must be integers.', true); return; }
     if (minDelay > maxDelay) { toast('Min delay cannot exceed max delay.', true); return; }
     await callAction('update_commenting_rules', selectedAccount || '', '', '', { template_file: selectedCommentTemplate, min_delay_minutes: minDelay, max_delay_minutes: maxDelay });
+    closeCommentRulesModal();
   });
 
   function initCmLogAutoScroll() {
