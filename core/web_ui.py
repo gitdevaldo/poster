@@ -1533,13 +1533,12 @@ def _render_page() -> str:
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 0;
       flex-wrap: nowrap;
     }
     .preset-inline > select {
       flex: 1 1 auto;
       min-width: 150px;
-      max-width: 260px;
     }
     .preset-inline > button {
       padding: 8px 10px;
@@ -1728,10 +1727,12 @@ def _render_page() -> str:
         <div class="logo-sub">Control Panel · Realtime API</div>
       </div>
     </div>
-    <div class="live-badge">
-      <span class="live-dot"></span>
-      <span id="lastUpdated">Connecting…</span>
-      <span id="postProgress" style="margin-left:12px;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;display:none"></span>
+    <div style="display:inline-flex;align-items:center;gap:12px">
+      <div class="live-badge">
+        <span class="live-dot"></span>
+        <span id="lastUpdated">Connecting…</span>
+      </div>
+      <span id="postProgress" style="background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-family:var(--heading);font-weight:700;display:none"></span>
     </div>
   </header>
 
@@ -1755,7 +1756,7 @@ def _render_page() -> str:
           <button id="deletePresetBtn" class="btn-red" type="button" title="Delete selected preset" aria-label="Delete selected preset">🗑️</button>
         </div>
 
-        <div id="presetInfo" class="mono" style="margin-top:8px">Using config.yaml</div>
+        <div id="presetInfo" class="mono" style="display:none"></div>
       </div>
 
       <div class="card">
@@ -1793,7 +1794,7 @@ def _render_page() -> str:
 
         <div class="settings-box">
           <div class="mini-lbl">Global Settings</div>
-          <div class="frow" style="margin:0">
+          <div class="frow" style="margin:0;justify-content:center">
             <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
             <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
             <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
@@ -2699,13 +2700,13 @@ def _render_page() -> str:
         ? `<span class="pill p-green">● On</span>`
         : `<span class="pill p-orange">● Off</span>`;
       const btns = [
-        `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')">🧩</button>`,
-        `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')">⚡</button>`,
+        `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')" title="Set template" aria-label="Set template">🧩</button>`,
+        `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')" title="Set as active account" aria-label="Set as active account">⚡</button>`,
         a.enabled
-          ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')">⏸</button>`
-          : `<button class="sm-btn btn-green" type="button" onclick="callAction('enable_account','${esc(a.id)}')">▶</button>`,
+          ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')" title="Disable account" aria-label="Disable account">⏸</button>`
+          : `<button class="sm-btn btn-green" type="button" onclick="callAction('enable_account','${esc(a.id)}')" title="Enable account" aria-label="Enable account">▶</button>`,
       ];
-      if (!a.is_active) btns.push(`<button class="sm-btn btn-red" type="button" onclick="callAction('delete_account','${esc(a.id)}')">🗑</button>`);
+      if (!a.is_active) btns.push(`<button class="sm-btn btn-red" type="button" onclick="callAction('delete_account','${esc(a.id)}')" title="Delete account" aria-label="Delete account">🗑</button>`);
       return `<tr>
         <td>
           <a href="#" class="mono" style="color:var(--accent);font-weight:700;text-decoration:none"
