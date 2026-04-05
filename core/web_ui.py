@@ -2498,23 +2498,16 @@ def _render_page() -> str:
       <button id="closeCommentRulesModal" type="button">✕ Close</button>
     </div>
     <div class="preview-box" style="margin-top:0">
-      <div class="field">
-        <label class="mini-lbl">Post Template to Comment From</label>
-        <div style="display:flex;align-items:stretch;gap:8px">
-          <div id="cmTemplateDisplay" style="flex:1;background:var(--bg,#fafaf8);border:1px solid var(--border,#e0dcd5);border-radius:8px;padding:6px 10px;min-height:36px;display:flex;flex-direction:column;justify-content:center;cursor:default">
-            <span id="cmTemplateName" style="font-weight:700;font-size:13px;line-height:1.3">—</span>
-            <span class="mono" id="cmTemplateFileLabel" style="color:var(--muted,#aaa);font-size:11px;line-height:1.3">—</span>
-          </div>
-          <button type="button" id="openCommentTemplateBtn" class="btn-primary" style="white-space:nowrap;flex-shrink:0;padding:0 14px">🧩 Choose</button>
-        </div>
-      </div>
-      <div class="frow" style="margin-top:12px">
+      <p class="mono" style="margin:0 0 12px;font-size:12px;color:var(--muted)">
+        To set the comment template, go to the Auto Comment tab and use the 🧩 button in the account actions row.
+      </p>
+      <div class="frow">
         <div class="field">
-          <label class="mini-lbl" for="cmMinDelay">Min Delay (minutes)</label>
+          <label class="mini-lbl" for="cmMinDelay">Min Delay Between Groups (minutes)</label>
           <input id="cmMinDelay" type="text" placeholder="1">
         </div>
         <div class="field">
-          <label class="mini-lbl" for="cmMaxDelay">Max Delay (minutes)</label>
+          <label class="mini-lbl" for="cmMaxDelay">Max Delay Between Groups (minutes)</label>
           <input id="cmMaxDelay" type="text" placeholder="3">
         </div>
       </div>
@@ -3043,20 +3036,15 @@ def _render_page() -> str:
       toast('Please select an account first.', true);
       return;
     }
-    document.getElementById('templateModal').classList.add('show');
+    const isComment = activeTab === 'autocomment';
+    templateModalContext = isComment ? 'comment' : 'post';
+    document.getElementById('templateModalTitle').textContent = isComment ? 'Choose Comment Template' : 'Choose Post Template';
+    document.getElementById('applyTemplateBtn').textContent  = isComment ? '💬 Use for Comment'   : '✅ Use Template';
     const sel = document.getElementById('templateSelect');
-    updateTemplatePreview(sel.value || '');
-  }
-
-  function openCommentTemplateModal() {
-    templateModalContext = 'comment';
-    document.getElementById('templateModalTitle').textContent = 'Choose Comment Template';
-    document.getElementById('applyTemplateBtn').textContent = '💬 Use for Comment';
-    document.getElementById('templateModal').classList.add('show');
-    const sel = document.getElementById('templateSelect');
-    if (sel && selectedCommentTemplate && templatesSnapshot.some(t => t.template_file === selectedCommentTemplate)) {
+    if (isComment && selectedCommentTemplate && templatesSnapshot.some(t => t.template_file === selectedCommentTemplate)) {
       sel.value = selectedCommentTemplate;
     }
+    document.getElementById('templateModal').classList.add('show');
     updateTemplatePreview(sel ? sel.value : '');
   }
 
@@ -3877,13 +3865,6 @@ def _render_page() -> str:
       selectedCommentTemplate = currentFile || (templates[0] && templates[0].template_file) || '';
     }
 
-    // Update the display card
-    const nameEl = document.getElementById('cmTemplateName');
-    const fileEl = document.getElementById('cmTemplateFileLabel');
-    const tpl = templates.find(t => t.template_file === selectedCommentTemplate);
-    if (nameEl) nameEl.textContent = (tpl && (tpl.title || tpl.template_file)) || (selectedCommentTemplate || '—');
-    if (fileEl) fileEl.textContent = selectedCommentTemplate || '—';
-
     const minEl = document.getElementById('cmMinDelay');
     const maxEl = document.getElementById('cmMaxDelay');
     if (document.activeElement !== minEl) minEl.value = cfg.min_delay_minutes ?? 1;
@@ -4008,10 +3989,6 @@ def _render_page() -> str:
     if (ev.target && ev.target.id === 'commentRulesModal') closeCommentRulesModal();
   });
 
-  document.getElementById('openCommentTemplateBtn').addEventListener('click', () => {
-    openCommentTemplateModal();
-  });
-
   document.getElementById('startCommenterBtn').addEventListener('click', async () => {
     if (!selectedAccount) { toast('Select an account from the sidebar first.', true); return; }
     await callAction('start_commenter', selectedAccount);
@@ -4022,12 +3999,13 @@ def _render_page() -> str:
   });
 
   document.getElementById('saveCommentSettingsBtn').addEventListener('click', async () => {
-    if (!selectedCommentTemplate) { toast('Choose a template first via the 🧩 Choose button.', true); return; }
     const minDelay = parseInt((document.getElementById('cmMinDelay').value || '').trim(), 10);
     const maxDelay = parseInt((document.getElementById('cmMaxDelay').value || '').trim(), 10);
     if (isNaN(minDelay) || isNaN(maxDelay)) { toast('Delay values must be integers.', true); return; }
     if (minDelay > maxDelay) { toast('Min delay cannot exceed max delay.', true); return; }
-    await callAction('update_commenting_rules', selectedAccount || '', '', '', { template_file: selectedCommentTemplate, min_delay_minutes: minDelay, max_delay_minutes: maxDelay });
+    const payload = { min_delay_minutes: minDelay, max_delay_minutes: maxDelay };
+    if (selectedCommentTemplate) payload.template_file = selectedCommentTemplate;
+    await callAction('update_commenting_rules', selectedAccount || '', '', '', payload);
     closeCommentRulesModal();
   });
 

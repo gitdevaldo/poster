@@ -77,5 +77,5 @@ accounts:
       posted_log: data/accounts/account-1/logs/posted_log.json
       screenshots: data/accounts/account-1/logs/screenshots
     posting:
-      template_file: post_1.yaml
+      template_file: post_2.yaml
     schedules: []
