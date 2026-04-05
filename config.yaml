@@ -62,7 +62,7 @@ error_handling:
 commenting:
   template_file: post_1.yaml
   min_delay_minutes: 1
-  max_delay_minutes: 3
+  max_delay_minutes: 1
 accounts:
   account-1:
     enabled: true
