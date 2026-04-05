@@ -2498,17 +2498,17 @@ def _render_page() -> str:
       <button id="closeCommentRulesModal" type="button">✕ Close</button>
     </div>
     <div class="preview-box" style="margin-top:0">
-      <p class="mono" style="margin:0 0 12px;font-size:12px;color:var(--muted)">
+      <p class="mono" style="margin:0 0 12px;font-size:12px;color:var(--muted-fg)">
         To set the comment template, go to the Auto Comment tab and use the 🧩 button in the account actions row.
       </p>
       <div class="frow">
         <div class="field">
           <label class="mini-lbl" for="cmMinDelay">Min Delay Between Groups (minutes)</label>
-          <input id="cmMinDelay" type="text" placeholder="1">
+          <input id="cmMinDelay" type="text" placeholder="1" style="color:var(--fg)">
         </div>
         <div class="field">
           <label class="mini-lbl" for="cmMaxDelay">Max Delay Between Groups (minutes)</label>
-          <input id="cmMaxDelay" type="text" placeholder="3">
+          <input id="cmMaxDelay" type="text" placeholder="3" style="color:var(--fg)">
         </div>
       </div>
       <div class="frow" style="margin-top:12px">
@@ -2529,7 +2529,7 @@ def _render_page() -> str:
     </div>
     <div class="preview-box" style="margin-top:0;text-align:center">
       <p style="margin:0 0 16px;font-size:15px"><strong>Reset posted history?</strong></p>
-      <p style="margin:0 0 20px;color:var(--muted);font-size:13px">
+      <p style="margin:0 0 20px;color:var(--muted-fg);font-size:13px">
         Choose whether to clear the posted log before running.
       </p>
       <div class="frow" style="justify-content:center;gap:12px">
