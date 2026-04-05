@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -30,16 +32,6 @@ def _persistent_profile_dir_from_config(config: dict[str, Any]) -> Path:
     session_cfg = config.get("session", {})
     profile_dir = str(session_cfg.get("persistent_profile_dir", "data/camoufox_profile"))
     return Path(profile_dir)
-
-
-def _scrape_profile_dir_from_config(config: dict[str, Any]) -> Path:
-    """Returns a separate profile directory used exclusively for scraping/validation.
-
-    This prevents profile-lock conflicts when the posting browser is already
-    running (Firefox allows only one process per profile directory at a time).
-    """
-    base = _persistent_profile_dir_from_config(config)
-    return base.parent / (base.name + "_scrape")
 
 
 def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
@@ -84,21 +76,39 @@ def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return kwargs
 
 
-def camoufox_scrape_kwargs(config: dict[str, Any]) -> dict[str, Any]:
-    """Camoufox kwargs for scraping/validation — uses a separate profile directory.
+@contextmanager
+def scrape_profile_context(config: dict[str, Any]):
+    """Context manager that provides a temporary copy of the posting profile.
 
-    The posting browser owns the main persistent profile. This variant points to
-    a sibling directory so both browsers can run concurrently without hitting
-    Firefox's single-process profile lock.
+    Before yielding, copies the main persistent profile to a sibling temp
+    directory so the scrape/validation browser can open it while the posting
+    browser still holds the lock on the original. The copy is unconditionally
+    deleted in the finally block — whether the scrape succeeds or crashes.
 
-    Session cookies from session.json are injected at runtime (cookie overlay),
-    so the scrape browser is authenticated without needing the posting profile.
+    Yields camoufox kwargs with ``user_data_dir`` pointing at the temp copy.
+    If the main profile does not exist yet, yields the regular kwargs unchanged
+    (first-run case where no profile has been created).
     """
+    main_profile = _persistent_profile_dir_from_config(config)
     kwargs = camoufox_kwargs(config)
-    scrape_profile_dir = _scrape_profile_dir_from_config(config)
-    scrape_profile_dir.mkdir(parents=True, exist_ok=True)
-    kwargs["user_data_dir"] = str(scrape_profile_dir)
-    return kwargs
+
+    if not main_profile.exists():
+        # No profile yet — let the browser create a fresh one normally.
+        yield kwargs
+        return
+
+    tmp_profile = main_profile.parent / (main_profile.name + "_tmp_scrape")
+    try:
+        if tmp_profile.exists():
+            shutil.rmtree(str(tmp_profile), ignore_errors=True)
+        log_event("Copying persistent profile for scrape browser.", context={"source": str(main_profile), "dest": str(tmp_profile)})
+        shutil.copytree(str(main_profile), str(tmp_profile))
+        kwargs["user_data_dir"] = str(tmp_profile)
+        yield kwargs
+    finally:
+        if tmp_profile.exists():
+            shutil.rmtree(str(tmp_profile), ignore_errors=True)
+            log_event("Removed temporary scrape profile copy.")
 
 
 def _home_url(config: dict[str, Any]) -> str:
@@ -370,25 +380,21 @@ def ensure_session(
 def validate_session(config_path: Path) -> bool:
     config = _load_config(config_path)
     session_path = _session_path_from_config(config)
-    session_data = load_session_data(session_path)
 
     Camoufox = _optional_import_camoufox()
-    # Use the scrape-specific profile so this can run concurrently with the
-    # posting browser without hitting the Firefox single-process profile lock.
-    kwargs = camoufox_scrape_kwargs(config)
     home_url = _home_url(config)
 
     try:
-        with Camoufox(**kwargs) as browser:
-            page = get_or_create_page(browser)
-            configure_page_window(page, config)
-            apply_session_cookies(page, session_data)
-            page.goto(home_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
-            valid = is_logged_in(page)
-            if valid:
-                save_session_from_page(page, session_path)
-            return valid
+        with scrape_profile_context(config) as kwargs:
+            with Camoufox(**kwargs) as browser:
+                page = get_or_create_page(browser)
+                configure_page_window(page, config)
+                page.goto(home_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(1500)
+                valid = is_logged_in(page)
+                if valid:
+                    save_session_from_page(page, session_path)
+                return valid
     except Exception as exc:
         log_exception("Session validation failed.", exc)
         return False

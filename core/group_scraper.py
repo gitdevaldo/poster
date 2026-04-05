@@ -9,14 +9,12 @@ from typing import Any
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
 from core.session_manager import (
-    apply_session_cookies,
-    camoufox_scrape_kwargs,
     configure_page_window,
     ensure_logged_in_in_page,
     ensure_session,
     get_or_create_page,
-    load_session_data,
     save_session_from_page,
+    scrape_profile_context,
 )
 
 
@@ -393,7 +391,6 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
         )
 
     session_path = ensure_session(config_path, validate_existing=False)
-    session_data = load_session_data(session_path)
 
     try:
         from camoufox.sync_api import Camoufox
@@ -411,51 +408,45 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
     min_expected_groups = int(scrape_cfg.get("min_expected_groups", 10))
     group_feed_url = "https://www.facebook.com/groups/feed/"
 
-    kwargs = camoufox_scrape_kwargs(config)
-
     log_event("Scraping joined Facebook groups.")
     scraped_groups: list[dict[str, str]] = []
 
     try:
-        with Camoufox(**kwargs) as browser:
-            page = get_or_create_page(browser)
-            configure_page_window(page, config)
-            # Always inject cookies from session.json into the scrape profile so
-            # it is authenticated even when the posting browser is running and
-            # holds the lock on the main persistent profile.
-            apply_session_cookies(page, session_data)
-            ensure_logged_in_in_page(page, config, session_path)
-            page.goto(group_list_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(2500)
-            scraped_groups = _extract_groups_from_page(
-                page,
-                max_scrolls=max_scrolls,
-                idle_rounds_to_stop=idle_rounds_to_stop,
-                scroll_wait_ms=scroll_wait_ms,
-                min_scroll_rounds_before_stop=min_scroll_rounds_before_stop,
-            )
-
-            if len(scraped_groups) < min_expected_groups:
-                log_event(
-                    "Joined-groups scrape returned low count; running feed fallback scrape.",
-                    context={
-                        "joined_groups_count": len(scraped_groups),
-                        "min_expected_groups": min_expected_groups,
-                        "fallback_url": group_feed_url,
-                    },
-                )
-                page.goto(group_feed_url, wait_until="domcontentloaded")
+        with scrape_profile_context(config) as kwargs:
+            with Camoufox(**kwargs) as browser:
+                page = get_or_create_page(browser)
+                configure_page_window(page, config)
+                ensure_logged_in_in_page(page, config, session_path)
+                page.goto(group_list_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(2500)
-                fallback_groups = _extract_groups_from_page(
+                scraped_groups = _extract_groups_from_page(
                     page,
                     max_scrolls=max_scrolls,
                     idle_rounds_to_stop=idle_rounds_to_stop,
                     scroll_wait_ms=scroll_wait_ms,
                     min_scroll_rounds_before_stop=min_scroll_rounds_before_stop,
                 )
-                scraped_groups = _merge_scraped_lists(scraped_groups, fallback_groups)
 
-            save_session_from_page(page, session_path)
+                if len(scraped_groups) < min_expected_groups:
+                    log_event(
+                        "Joined-groups scrape returned low count; running feed fallback scrape.",
+                        context={
+                            "joined_groups_count": len(scraped_groups),
+                            "min_expected_groups": min_expected_groups,
+                        },
+                    )
+                    page.goto(group_feed_url, wait_until="domcontentloaded")
+                    page.wait_for_timeout(2500)
+                    fallback_groups = _extract_groups_from_page(
+                        page,
+                        max_scrolls=max_scrolls,
+                        idle_rounds_to_stop=idle_rounds_to_stop,
+                        scroll_wait_ms=scroll_wait_ms,
+                        min_scroll_rounds_before_stop=min_scroll_rounds_before_stop,
+                    )
+                    scraped_groups = _merge_scraped_lists(scraped_groups, fallback_groups)
+
+                save_session_from_page(page, session_path)
     except Exception as exc:
         log_exception("Failed during group scraping.", exc)
         raise
