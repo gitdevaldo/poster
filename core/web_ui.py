@@ -407,6 +407,100 @@ def _get_next_due_schedule(config_path: Path) -> tuple[str, dict[str, Any], date
     return best
 
 
+def _save_account_comment_schedules(config_path: Path, account_id: str, schedules: list[dict[str, Any]]) -> bool:
+    try:
+        config = load_raw_config(config_path)
+        accounts = config.get("accounts", {})
+        if not isinstance(accounts, dict):
+            return False
+        account = accounts.get(account_id)
+        if not isinstance(account, dict):
+            return False
+        account["comment_schedules"] = [dict(item) for item in schedules if isinstance(item, dict)]
+        accounts[account_id] = account
+        config["accounts"] = accounts
+        save_raw_config(config_path, config)
+        return True
+    except Exception:
+        return False
+
+
+def _get_account_comment_schedules(config_path: Path, account_id: str | None) -> list[dict[str, Any]]:
+    if not account_id:
+        return []
+    config = load_raw_config(config_path)
+    accounts = config.get("accounts", {})
+    if not isinstance(accounts, dict):
+        return []
+    account = accounts.get(account_id)
+    if not isinstance(account, dict):
+        return []
+    records = account.get("comment_schedules", [])
+    if not isinstance(records, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    changed = False
+    for item in records:
+        if not isinstance(item, dict):
+            changed = True
+            continue
+        timezone_name = str(item.get("timezone", "")).strip() or "UTC"
+        normalized_item = _ensure_schedule_record_defaults(item, default_timezone=timezone_name, touch=False)
+        if normalized_item != item:
+            changed = True
+        normalized.append(normalized_item)
+    if changed:
+        account["comment_schedules"] = [dict(item) for item in normalized]
+        accounts[account_id] = account
+        config["accounts"] = accounts
+        save_raw_config(config_path, config)
+    return normalized
+
+
+def _get_next_due_comment_schedule(config_path: Path) -> tuple[str, dict[str, Any], datetime] | None:
+    config = load_raw_config(config_path)
+    accounts = config.get("accounts", {})
+    if not isinstance(accounts, dict):
+        return None
+    best: tuple[str, dict[str, Any], datetime] | None = None
+    config_changed = False
+    for account_id, account in accounts.items():
+        if not isinstance(account, dict):
+            continue
+        records = account.get("comment_schedules", [])
+        if not isinstance(records, list):
+            continue
+        normalized_records: list[dict[str, Any]] = []
+        account_changed = False
+        for item in records:
+            if not isinstance(item, dict):
+                account_changed = True
+                continue
+            record = _ensure_schedule_record_defaults(
+                item,
+                default_timezone=str(item.get("timezone", "")).strip() or "UTC",
+                touch=False,
+            )
+            if record != item:
+                account_changed = True
+            normalized_records.append(record)
+            if not bool(record.get("enabled", True)):
+                continue
+            next_run = _compute_next_run_utc(record)
+            if next_run is None:
+                continue
+            if best is None or next_run < best[2]:
+                best = (str(account_id), record, next_run)
+        if account_changed:
+            account["comment_schedules"] = [dict(item) for item in normalized_records]
+            accounts[account_id] = account
+            config_changed = True
+    if config_changed:
+        config["accounts"] = accounts
+        save_raw_config(config_path, config)
+    return best
+
+
 def _to_schedule_ui_record(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record)
     run_at_raw = str(item.get("run_at", "")).strip()
@@ -480,7 +574,18 @@ class _WebState:
         self.commenter_message: str = ""
         self.commenter_stop_event = threading.Event()
         self.commenter_pause_event = threading.Event()
+        self.comment_schedule_thread: threading.Thread | None = None
+        self.comment_schedule_stop_event = threading.Event()
+        self.comment_schedule_wake_event = threading.Event()
+        self.comment_schedule_status: str = "idle"
+        self.comment_schedule_message: str = ""
+        self.comment_schedule_next_run_at: str = ""
+        self.comment_schedule_last_run_at: str = ""
+        self.comment_schedule_last_result: str = ""
+        self.comment_schedule_account: str = ""
+        self.comment_schedule_spec: dict[str, Any] = {}
         self._ensure_schedule_thread_locked()
+        self._ensure_comment_schedule_thread_locked()
 
     def _sync_runner_locked(self) -> None:
         if self.runner_thread is not None and not self.runner_thread.is_alive():
@@ -666,6 +771,134 @@ class _WebState:
             daemon=True,
         )
         self.schedule_thread.start()
+
+    def _ensure_comment_schedule_thread_locked(self) -> None:
+        if self.comment_schedule_thread is not None and self.comment_schedule_thread.is_alive():
+            return
+        self.comment_schedule_stop_event.clear()
+        self.comment_schedule_wake_event.clear()
+
+        def _comment_schedule_worker() -> None:
+            try:
+                while not self.comment_schedule_stop_event.is_set():
+                    due = _get_next_due_comment_schedule(self.config_path)
+                    if due is None:
+                        with self.lock:
+                            self.comment_schedule_status = "idle"
+                            self.comment_schedule_message = "No enabled comment schedules."
+                            self.comment_schedule_next_run_at = ""
+                            self.comment_schedule_account = ""
+                            self.comment_schedule_spec = {}
+                        self.comment_schedule_wake_event.wait(2.0)
+                        self.comment_schedule_wake_event.clear()
+                        continue
+                    account_id, record, next_run_utc = due
+                    schedule_id = str(record.get("id", "")).strip()
+                    with self.lock:
+                        self.comment_schedule_status = "running"
+                        self.comment_schedule_message = f"Waiting for schedule '{schedule_id}' on '{account_id}'."
+                        self.comment_schedule_next_run_at = next_run_utc.isoformat()
+                        self.comment_schedule_account = account_id
+                        self.comment_schedule_spec = dict(record)
+                    should_recompute = False
+                    while not self.comment_schedule_stop_event.is_set():
+                        now_utc = datetime.now(timezone.utc)
+                        if now_utc >= next_run_utc:
+                            break
+                        wait_seconds = max(0.2, min(1.0, (next_run_utc - now_utc).total_seconds()))
+                        if self.comment_schedule_wake_event.wait(wait_seconds):
+                            self.comment_schedule_wake_event.clear()
+                            should_recompute = True
+                            break
+                    if self.comment_schedule_stop_event.is_set():
+                        break
+                    if should_recompute:
+                        continue
+                    with self.lock:
+                        self.comment_schedule_status = "executing"
+                        self.comment_schedule_message = f"Running comment schedule '{schedule_id}' on '{account_id}'."
+                    started = False
+                    start_error = ""
+                    while not self.comment_schedule_stop_event.is_set():
+                        with self.lock:
+                            ok_start, msg_start = self.start_commenter(account_id)
+                        if ok_start:
+                            started = True
+                            break
+                        if "already running" in msg_start.lower():
+                            if self.comment_schedule_wake_event.wait(1.0):
+                                self.comment_schedule_wake_event.clear()
+                            continue
+                        start_error = msg_start
+                        break
+                    if not started:
+                        schedules = _get_account_comment_schedules(self.config_path, account_id)
+                        idx, current = _find_schedule_record(schedules, schedule_id)
+                        if idx >= 0 and isinstance(current, dict):
+                            updated = _ensure_schedule_record_defaults(current, default_timezone=str(current.get("timezone", "")).strip() or "UTC", touch=True)
+                            updated["last_run_at"] = _now_utc_iso()
+                            updated["last_result"] = start_error or "Skipped."
+                            updated["last_status"] = "error"
+                            if str(updated.get("type", "")).strip() in {"one_time", "specific_datetime"}:
+                                updated["enabled"] = False
+                            schedules[idx] = updated
+                            _save_account_comment_schedules(self.config_path, account_id, schedules)
+                        with self.lock:
+                            self.comment_schedule_last_run_at = _now_utc_iso()
+                            self.comment_schedule_last_result = start_error or "Skipped."
+                            self.comment_schedule_status = "running"
+                            self.comment_schedule_message = "Waiting for next comment schedule."
+                        continue
+                    while not self.comment_schedule_stop_event.is_set():
+                        with self.lock:
+                            active = self.commenter_thread is not None and self.commenter_thread.is_alive()
+                        if not active:
+                            break
+                        self.comment_schedule_wake_event.wait(0.5)
+                        self.comment_schedule_wake_event.clear()
+                    if self.comment_schedule_stop_event.is_set():
+                        with self.lock:
+                            if self.commenter_thread is not None and self.commenter_account == account_id:
+                                self.stop_commenter(account_id)
+                        break
+                    with self.lock:
+                        run_result = self.commenter_message or "success"
+                    run_status = "success" if run_result == "success" else "error"
+                    schedules = _get_account_comment_schedules(self.config_path, account_id)
+                    idx, current = _find_schedule_record(schedules, schedule_id)
+                    if idx >= 0 and isinstance(current, dict):
+                        updated = _ensure_schedule_record_defaults(current, default_timezone=str(current.get("timezone", "")).strip() or "UTC", touch=True)
+                        updated["last_run_at"] = _now_utc_iso()
+                        updated["last_result"] = run_result
+                        updated["last_status"] = run_status
+                        if str(updated.get("type", "")).strip() in {"one_time", "specific_datetime"}:
+                            updated["enabled"] = False
+                        schedules[idx] = updated
+                        _save_account_comment_schedules(self.config_path, account_id, schedules)
+                    with self.lock:
+                        self.comment_schedule_last_run_at = _now_utc_iso()
+                        self.comment_schedule_last_result = run_result
+                        self.comment_schedule_status = "running"
+                        self.comment_schedule_message = "Waiting for next comment schedule."
+            except Exception as exc:
+                with self.lock:
+                    self.comment_schedule_status = "error"
+                    self.comment_schedule_message = f"{type(exc).__name__}: {exc}"
+                    self.comment_schedule_next_run_at = ""
+            finally:
+                with self.lock:
+                    self.comment_schedule_thread = None
+                    if self.comment_schedule_status != "error":
+                        self.comment_schedule_status = "stopped"
+                        self.comment_schedule_message = "Comment scheduler stopped."
+                        self.comment_schedule_next_run_at = ""
+
+        self.comment_schedule_thread = threading.Thread(
+            target=_comment_schedule_worker,
+            name="web-ui-comment-scheduler-loop",
+            daemon=True,
+        )
+        self.comment_schedule_thread.start()
 
     def snapshot_runner(self, selected_account: str | None = None) -> dict[str, Any]:
         self._sync_runner_locked()
@@ -893,6 +1126,112 @@ class _WebState:
 
         return True, self.schedule_message
 
+    def start_comment_schedule(self, account_id: str, schedule_rules: dict[str, Any]) -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        effective_cfg = load_config(self.config_path, account)
+        browser_cfg = effective_cfg.get("browser", {}) if isinstance(effective_cfg.get("browser"), dict) else {}
+        default_tz = str(browser_cfg.get("timezone", "UTC")).strip() or "UTC"
+        rules = {k: v for k, v in (schedule_rules or {}).items() if k != "dry_run"}
+        ok, error, normalized = _normalize_schedule_rules(rules, default_tz)
+        if not ok:
+            return False, error
+        schedule_record = _ensure_schedule_record_defaults(normalized, default_timezone=default_tz, touch=True)
+        schedule_record["id"] = _new_schedule_id()
+        schedules = _get_account_comment_schedules(self.config_path, account)
+        schedules.append(schedule_record)
+        if not _save_account_comment_schedules(self.config_path, account, schedules):
+            return False, "Failed to save comment schedule config."
+        with self.lock:
+            self.comment_schedule_account = account
+            self.comment_schedule_spec = dict(schedule_record)
+            self.comment_schedule_status = "running"
+            self.comment_schedule_message = f"Comment schedule '{schedule_record['id']}' saved."
+            next_run = _compute_next_run_utc(schedule_record)
+            self.comment_schedule_next_run_at = next_run.isoformat() if next_run else ""
+            self._ensure_comment_schedule_thread_locked()
+        return True, f"Comment schedule '{schedule_record['id']}' saved for '{account}'."
+
+    def stop_comment_schedule(self, account_id: str, schedule_id: str = "") -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        schedules = _get_account_comment_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No comment schedules found for this account."
+        target_id = schedule_id.strip()
+        changed = 0
+        if target_id:
+            idx, current = _find_schedule_record(schedules, target_id)
+            if idx < 0 or not isinstance(current, dict):
+                return False, f"Comment schedule '{target_id}' not found."
+            updated = _ensure_schedule_record_defaults(current, default_timezone=str(current.get("timezone", "")).strip() or "UTC", touch=True)
+            if bool(updated.get("enabled", True)):
+                updated["enabled"] = False
+                updated["last_status"] = "stopped"
+                schedules[idx] = updated
+                changed = 1
+        else:
+            for idx, current in enumerate(schedules):
+                if not isinstance(current, dict):
+                    continue
+                updated = _ensure_schedule_record_defaults(current, default_timezone=str(current.get("timezone", "")).strip() or "UTC", touch=True)
+                if bool(updated.get("enabled", True)):
+                    updated["enabled"] = False
+                    updated["last_status"] = "stopped"
+                    schedules[idx] = updated
+                    changed += 1
+            if changed == 0:
+                return False, "No enabled comment schedules to stop."
+        if not _save_account_comment_schedules(self.config_path, account, schedules):
+            return False, "Failed to update comment schedule config."
+        with self.lock:
+            self.comment_schedule_message = f"Stopped {changed} comment schedule(s)."
+            self.comment_schedule_wake_event.set()
+        return True, self.comment_schedule_message
+
+    def delete_comment_schedule(self, account_id: str, schedule_id: str) -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        target_id = schedule_id.strip()
+        if not target_id:
+            return False, "Schedule id is required."
+        schedules = _get_account_comment_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No comment schedules found for this account."
+        idx, _ = _find_schedule_record(schedules, target_id)
+        if idx < 0:
+            return False, f"Comment schedule '{target_id}' not found."
+        del schedules[idx]
+        if not _save_account_comment_schedules(self.config_path, account, schedules):
+            return False, "Failed to delete comment schedule config."
+        with self.lock:
+            self.comment_schedule_message = f"Comment schedule '{target_id}' deleted."
+            self.comment_schedule_wake_event.set()
+        return True, self.comment_schedule_message
+
+    def snapshot_comment_schedule(self, selected_account: str | None = None) -> dict[str, Any]:
+        is_active = self.comment_schedule_thread is not None and self.comment_schedule_thread.is_alive()
+        target = (selected_account or "").strip()
+        is_selected = bool(target and target == self.comment_schedule_account)
+        account_schedules = _get_account_comment_schedules(self.config_path, target)
+        ui_records = [_to_schedule_ui_record(item) for item in account_schedules]
+        ui_records.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+        return {
+            "is_active": is_active,
+            "status": self.comment_schedule_status,
+            "account_id": self.comment_schedule_account,
+            "is_selected_account": is_selected,
+            "message": self.comment_schedule_message,
+            "next_run_at": self.comment_schedule_next_run_at,
+            "last_run_at": self.comment_schedule_last_run_at,
+            "last_result": self.comment_schedule_last_result,
+            "spec": self.comment_schedule_spec,
+            "records": ui_records,
+        }
+
     def start_commenter(self, account_id: str) -> tuple[bool, str]:
         self._sync_runner_locked()
         if self.commenter_thread is not None:
@@ -967,6 +1306,7 @@ def _build_state(
   runner_state: dict[str, Any] | None = None,
   schedule_state: dict[str, Any] | None = None,
   commenter_state: dict[str, Any] | None = None,
+  comment_schedule_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     accounts = list_accounts(config_path)
     active = get_active_account(config_path) or ""
@@ -1076,6 +1416,18 @@ def _build_state(
         "account_id": "",
         "is_selected_account": False,
         "message": "",
+      },
+      "comment_schedule_control": comment_schedule_state or {
+        "is_active": False,
+        "status": "idle",
+        "account_id": "",
+        "is_selected_account": False,
+        "message": "",
+        "next_run_at": "",
+        "last_run_at": "",
+        "last_result": "",
+        "spec": {},
+        "records": [_to_schedule_ui_record(item) for item in _get_account_comment_schedules(config_path, account_id)],
       },
     }
 
@@ -2026,6 +2378,41 @@ def _render_page() -> str:
         </div>
       </div>
     </div>
+    <!-- ─── Live Log (shared, tab-aware) ─── -->
+    <div class="card" style="margin-top:0">
+      <div class="frow" style="justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="margin:0">
+          <div class="t-icon ti-green">📝</div>
+          <span id="liveLogCardTitle">Live Log — Auto Post</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label class="auto-scroll-ctrl" for="logAutoScroll" id="logAutoScrollLabel">
+            <input id="logAutoScroll" type="checkbox" checked>
+            Auto Scroll
+          </label>
+          <label class="auto-scroll-ctrl" for="logAutoScroll2" id="logAutoScroll2Label" style="display:none">
+            <input id="logAutoScroll2" type="checkbox" checked>
+            Auto Scroll
+          </label>
+        </div>
+      </div>
+      <div id="liveLogWrap" class="tbl-wrap log-wrap">
+        <table class="log-table">
+          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+          <tbody id="liveLogsBody">
+            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="cmLiveLogWrap" class="tbl-wrap log-wrap" style="display:none">
+        <table class="log-table">
+          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
+          <tbody id="cmLiveLogsBody">
+            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </aside>
 
   <!-- ═══ TAB PANELS — right column, switches with tab ═══ -->
@@ -2148,27 +2535,6 @@ def _render_page() -> str:
       </div>
     </section>
 
-    <!-- ─── Auto Post Live Log ─── -->
-    <div class="card" style="margin-top:14px">
-      <div class="frow" style="justify-content:space-between;margin-bottom:8px">
-        <div class="card-title" style="margin:0">
-          <div class="t-icon ti-green">📝</div>
-          Live Log — Auto Post
-        </div>
-        <label class="auto-scroll-ctrl" for="logAutoScroll">
-          <input id="logAutoScroll" type="checkbox" checked>
-          Auto Scroll
-        </label>
-      </div>
-      <div class="tbl-wrap log-wrap" id="liveLogWrap">
-        <table class="log-table">
-          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
-          <tbody id="liveLogsBody">
-            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div><!-- end tab-autopost -->
 
   <!-- ─── AUTO COMMENT TAB ─── -->
@@ -2188,27 +2554,53 @@ def _render_page() -> str:
         <div class="mini-lbl">Commenter Status</div>
         <div id="cmStatusInfo" class="mono" style="margin-top:4px">Idle — no commenter running.</div>
       </div>
-    </div>
 
-    <!-- ─── Auto Comment Live Log ─── -->
-    <div class="card" style="margin-top:14px">
-      <div class="frow" style="justify-content:space-between;margin-bottom:8px">
-        <div class="card-title" style="margin:0">
-          <div class="t-icon ti-green">📝</div>
-          Live Log — Auto Comment
+      <div class="settings-box" style="margin-top:10px">
+        <div class="mini-lbl">Scheduler</div>
+        <div class="frow">
+          <div class="field" style="min-width:180px;flex:2">
+            <label class="mini-lbl" for="cmSchType">Type</label>
+            <select id="cmSchType">
+              <option value="one_time">One time (next occurrence)</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly (select days)</option>
+              <option value="specific_datetime">Specific date &amp; time</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:140px;flex:1">
+            <label class="mini-lbl" for="cmSchTime">Time</label>
+            <input id="cmSchTime" type="time" value="09:00">
+          </div>
         </div>
-        <label class="auto-scroll-ctrl" for="logAutoScroll2">
-          <input id="logAutoScroll2" type="checkbox" checked>
-          Auto Scroll
-        </label>
-      </div>
-      <div class="tbl-wrap log-wrap" id="cmLiveLogWrap">
-        <table class="log-table">
-          <thead><tr><th style="width:90px">Time</th><th style="width:60px">Level</th><th>Message</th></tr></thead>
-          <tbody id="cmLiveLogsBody">
-            <tr><td colspan="3"><div class="empty"><span class="empty-ico">📝</span><span class="empty-txt">Waiting logs…</span></div></td></tr>
-          </tbody>
-        </table>
+        <div class="frow" id="cmSchWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px">
+          <label><input type="checkbox" class="cmSchDay" value="0"> Mon</label>
+          <label><input type="checkbox" class="cmSchDay" value="1"> Tue</label>
+          <label><input type="checkbox" class="cmSchDay" value="2"> Wed</label>
+          <label><input type="checkbox" class="cmSchDay" value="3"> Thu</label>
+          <label><input type="checkbox" class="cmSchDay" value="4"> Fri</label>
+          <label><input type="checkbox" class="cmSchDay" value="5"> Sat</label>
+          <label><input type="checkbox" class="cmSchDay" value="6"> Sun</label>
+        </div>
+        <div class="frow" id="cmSchSpecificWrap" style="display:none">
+          <div class="field" style="min-width:220px;flex:1">
+            <label class="mini-lbl" for="cmSchSpecificDateTime">Specific date &amp; time</label>
+            <input id="cmSchSpecificDateTime" type="datetime-local">
+          </div>
+        </div>
+        <div class="frow">
+          <div class="field" style="min-width:180px;flex:1">
+            <label class="mini-lbl" for="cmSchTimezone">Timezone</label>
+            <input id="cmSchTimezone" type="text" placeholder="Asia/Jakarta" style="color:var(--fg)">
+          </div>
+        </div>
+        <div class="frow">
+          <button id="cmStartScheduleBtn" class="btn-primary" type="button">⏰ Start Schedule</button>
+          <button id="cmStopScheduleBtn" class="btn-red" type="button">■ Stop All</button>
+        </div>
+        <div id="cmScheduleInfo" class="mono" style="margin-top:6px">No comment schedule active.</div>
+        <div id="cmScheduleRecords" class="schedule-records">
+          <div class="mono">No comment schedules saved.</div>
+        </div>
       </div>
     </div>
 
@@ -3377,6 +3769,7 @@ def _render_page() -> str:
       renderGroups({ groups: groupsSnapshot });
       suppressUnsavedMark = false;
       renderCommenterState(data);
+      renderCommentScheduleState(data);
       renderCommentGroups(groupsSnapshot);
       renderCommentSettings(data);
       setUpdated();
@@ -3845,6 +4238,17 @@ def _render_page() -> str:
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('hidden', panel.id !== 'tab-' + name);
     });
+    const isComment = name === 'autocomment';
+    const titleEl = document.getElementById('liveLogCardTitle');
+    if (titleEl) titleEl.textContent = isComment ? 'Live Log — Auto Comment' : 'Live Log — Auto Post';
+    const postWrap = document.getElementById('liveLogWrap');
+    const cmWrap = document.getElementById('cmLiveLogWrap');
+    if (postWrap) postWrap.style.display = isComment ? 'none' : '';
+    if (cmWrap) cmWrap.style.display = isComment ? '' : 'none';
+    const postScrollLabel = document.getElementById('logAutoScrollLabel');
+    const cmScrollLabel = document.getElementById('logAutoScroll2Label');
+    if (postScrollLabel) postScrollLabel.style.display = isComment ? 'none' : '';
+    if (cmScrollLabel) cmScrollLabel.style.display = isComment ? '' : 'none';
   }
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3902,6 +4306,103 @@ def _render_page() -> str:
 
     if (startBtn) startBtn.disabled = isActive;
     if (stopBtn) stopBtn.disabled = !isActive;
+  }
+
+  function cmUpdateScheduleTypeVisibility() {
+    const type = (document.getElementById('cmSchType').value || '').trim();
+    const weekWrap = document.getElementById('cmSchWeekdaysWrap');
+    const specificWrap = document.getElementById('cmSchSpecificWrap');
+    const timeInput = document.getElementById('cmSchTime');
+    weekWrap.style.display = type === 'weekly' ? 'flex' : 'none';
+    specificWrap.style.display = type === 'specific_datetime' ? 'flex' : 'none';
+    timeInput.disabled = type === 'specific_datetime';
+  }
+
+  async function disableCommentSchedule(scheduleId) {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
+    await callAction('stop_comment_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
+  async function deleteCommentSchedule(scheduleId) {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
+    if (!confirm(`Delete comment schedule "${scheduleId}"? This cannot be undone.`)) return;
+    await callAction('delete_comment_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
+  let lastCmScheduleSpecSignature = '';
+
+  function renderCommentScheduleState(data) {
+    const sch = data.comment_schedule_control || {};
+    const savedList = (sch.records || []).slice();
+    const info = document.getElementById('cmScheduleInfo');
+    const startBtn = document.getElementById('cmStartScheduleBtn');
+    const stopBtn = document.getElementById('cmStopScheduleBtn');
+    const listEl = document.getElementById('cmScheduleRecords');
+    if (!info) return;
+    const hasEnabled = savedList.some(item => !!item.enabled);
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = !hasEnabled;
+    const active = !!sch.is_active;
+    if (!active) {
+      info.textContent = sch.message || (hasEnabled ? 'Comment schedules saved and waiting.' : 'No comment schedule active.');
+    } else {
+      const next = sch.next_run_at ? new Date(sch.next_run_at).toLocaleString() : '-';
+      const last = sch.last_run_at ? new Date(sch.last_run_at).toLocaleString() : '-';
+      info.textContent = `Status: ${sch.status} | Next: ${next} | Last: ${last}`;
+    }
+    if (!savedList.length) {
+      listEl.innerHTML = '<div class="mono">No comment schedules saved.</div>';
+    } else {
+      const rows = savedList.map(item => {
+        const id = String(item.id || '');
+        const enabled = !!item.enabled;
+        const type = String(item.type || 'unknown');
+        const tz = String(item.timezone || 'UTC');
+        const next = item.next_run_at ? new Date(item.next_run_at).toLocaleString() : '-';
+        const last = item.last_run_at ? new Date(item.last_run_at).toLocaleString() : '-';
+        const status = String(item.last_status || 'pending');
+        const badgeClass = enabled ? 'p-green' : 'p-gray';
+        return `
+          <div class="schedule-item">
+            <div class="meta">
+              <strong>${esc(id)} · ${esc(type)}</strong>
+              <span>Next: ${esc(next)} | Last: ${esc(last)}</span>
+              <span>TZ: ${esc(tz)} | Status: ${esc(status)}</span>
+            </div>
+            <div class="actions">
+              <span class="pill ${badgeClass}">${enabled ? 'Enabled' : 'Disabled'}</span>
+              ${enabled ? `<button class="btn-red" type="button" onclick="disableCommentSchedule('${esc(id)}')" title="Stop this schedule">Stop</button>` : ''}
+              <button class="btn-red" type="button" onclick="deleteCommentSchedule('${esc(id)}')" title="Delete this schedule">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+      listEl.innerHTML = rows.join('');
+    }
+    // Pre-fill inputs from latest enabled schedule spec
+    const isSelectedSchedule = !!sch.is_selected_account;
+    let spec = {};
+    if (isSelectedSchedule && sch.spec && typeof sch.spec === 'object' && sch.spec.type) {
+      spec = sch.spec;
+    } else {
+      const enabledRecord = savedList.find(r => r.enabled);
+      if (enabledRecord && enabledRecord.type) spec = enabledRecord;
+    }
+    const sig = `${selectedAccount || ''}::${JSON.stringify(spec)}`;
+    if (sig !== lastCmScheduleSpecSignature) {
+      lastCmScheduleSpecSignature = sig;
+      if (spec.type) {
+        const typeEl = document.getElementById('cmSchType');
+        const timeEl = document.getElementById('cmSchTime');
+        const tzEl = document.getElementById('cmSchTimezone');
+        if (typeEl && document.activeElement !== typeEl) typeEl.value = spec.type;
+        if (timeEl && document.activeElement !== timeEl) timeEl.value = spec.time || '09:00';
+        if (tzEl && document.activeElement !== tzEl) tzEl.value = spec.timezone || '';
+        cmUpdateScheduleTypeVisibility();
+      }
+    }
   }
 
   function cmResetGroupPaging() {
@@ -3996,6 +4497,26 @@ def _render_page() -> str:
 
   document.getElementById('stopCommenterBtn').addEventListener('click', async () => {
     await callAction('stop_commenter', selectedAccount || '');
+  });
+
+  document.getElementById('cmSchType').addEventListener('change', cmUpdateScheduleTypeVisibility);
+  document.getElementById('cmStartScheduleBtn').addEventListener('click', async () => {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    const type = (document.getElementById('cmSchType').value || '').trim();
+    const timeVal = (document.getElementById('cmSchTime').value || '').trim();
+    const timezoneVal = (document.getElementById('cmSchTimezone').value || '').trim();
+    const specificVal = (document.getElementById('cmSchSpecificDateTime').value || '').trim();
+    const weekdays = Array.from(document.querySelectorAll('.cmSchDay'))
+      .filter(el => el.checked)
+      .map(el => parseInt(el.value || '-1', 10))
+      .filter(v => !Number.isNaN(v) && v >= 0 && v <= 6);
+    await callAction('start_comment_schedule', selectedAccount, '', '', {
+      type, time: timeVal, timezone: timezoneVal, specific_datetime: specificVal, weekdays
+    });
+  });
+  document.getElementById('cmStopScheduleBtn').addEventListener('click', async () => {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    await callAction('stop_comment_schedule', selectedAccount, '', '', { schedule_id: '' });
   });
 
   document.getElementById('saveCommentSettingsBtn').addEventListener('click', async () => {
@@ -4245,7 +4766,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
               runner_state = state.snapshot_runner(selected_account)
               schedule_state = state.snapshot_schedule(selected_account)
               commenter_state = state.snapshot_commenter(selected_account)
-            payload = _build_state(state.config_path, selected_account, runner_state, schedule_state, commenter_state)
+              comment_schedule_state = state.snapshot_comment_schedule(selected_account)
+            payload = _build_state(state.config_path, selected_account, runner_state, schedule_state, commenter_state, comment_schedule_state)
             self._send_json({"ok": True, "data": payload, **payload})
             return
           if parsed.path == "/api/logs":
@@ -4302,6 +4824,9 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   "delete_schedule",
                   "start_commenter",
                   "stop_commenter",
+                  "start_comment_schedule",
+                  "stop_comment_schedule",
+                  "delete_comment_schedule",
                 }
                 if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
@@ -4333,6 +4858,14 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                     ok, result = state.start_commenter(account_id)
                   elif action == "stop_commenter":
                     ok, result = state.stop_commenter(account_id)
+                  elif action == "start_comment_schedule":
+                    ok, result = state.start_comment_schedule(account_id, template_data if isinstance(template_data, dict) else {})
+                  elif action == "stop_comment_schedule":
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.stop_comment_schedule(account_id, schedule_id)
+                  elif action == "delete_comment_schedule":
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.delete_comment_schedule(account_id, schedule_id)
                   else:
                     ok, result = _execute_account_action(
                       state.config_path,
@@ -4349,8 +4882,9 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   runner_state = state.snapshot_runner(account_id or None)
                   schedule_state = state.snapshot_schedule(account_id or None)
                   commenter_state = state.snapshot_commenter(account_id or None)
+                  comment_schedule_state = state.snapshot_comment_schedule(account_id or None)
 
-                state_payload = _build_state(state.config_path, account_id or None, runner_state, schedule_state, commenter_state)
+                state_payload = _build_state(state.config_path, account_id or None, runner_state, schedule_state, commenter_state, comment_schedule_state)
                 if ok:
                     self._send_json({"ok": True, "message": result, "state": state_payload})
                 else:
