@@ -1148,6 +1148,59 @@ def _save_template_file(template_path: Path, template_data: dict[str, Any]) -> N
         yaml.safe_dump(template_data, f, sort_keys=False, allow_unicode=True)
 
 
+_ACTIVITY_LOG_PREFIXES = (
+    "state_enter:",
+    "state_exit:",
+    "popup_textbox_found",
+    "popup_post_button_enabled",
+    "popup_post_clicked",
+)
+
+_MESSAGE_RENAME_MAP = {
+    "popup_flow_failed": "Failed to open post composer",
+}
+
+_CONTEXT_LABEL_MAP = {
+    "group": "Group",
+    "text_length": "Text length",
+    "image_count": "Images",
+    "image_path": "Image",
+    "reason": "Reason",
+    "skipped": "Skipped",
+    "attempt": "Attempt",
+    "error_type": "Error",
+    "error": "Detail",
+    "account": "Account",
+    "template": "Template",
+}
+
+
+_CONTEXT_SKIP_KEYS = {"url", "error_raw", "traceback"}
+
+
+def _format_context(context: dict) -> str:
+    parts = []
+    for key in _CONTEXT_LABEL_MAP:
+        if key in context:
+            val = context[key]
+            if val is None or val == "":
+                continue
+            label = _CONTEXT_LABEL_MAP[key]
+            parts.append(f"{label}: {val}")
+    for key, val in context.items():
+        if key not in _CONTEXT_LABEL_MAP and key not in _CONTEXT_SKIP_KEYS and val is not None and val != "":
+            parts.append(f"{key}: {val}")
+    return "  —  ".join(parts)
+
+
+def _is_activity_log(message: str) -> bool:
+    msg_lower = message.lower()
+    for prefix in _ACTIVITY_LOG_PREFIXES:
+        if msg_lower.startswith(prefix.lower()):
+            return True
+    return False
+
+
 def _read_live_logs(limit: int = 200) -> list[dict[str, str]]:
   log_path = get_log_file()
   if not log_path.exists():
@@ -1167,9 +1220,14 @@ def _read_live_logs(limit: int = 200) -> list[dict[str, str]]:
           timestamp = str(payload.get("timestamp", "")).strip()
           level = str(payload.get("level", "INFO")).strip().upper() or "INFO"
           message = str(payload.get("message", "")).strip()
+          if _is_activity_log(message):
+            continue
+          message = _MESSAGE_RENAME_MAP.get(message, message)
           context = payload.get("context")
           if isinstance(context, dict) and context:
-            message = f"{message} | {json.dumps(context, ensure_ascii=False)}"
+            ctx_str = _format_context(context)
+            if ctx_str:
+              message = f"{message}  —  {ctx_str}"
           rows.append({
             "timestamp": timestamp,
             "level": level,
