@@ -34,6 +34,42 @@ def _persistent_profile_dir_from_config(config: dict[str, Any]) -> Path:
     return Path(profile_dir)
 
 
+# Firefox/Camoufox directories that are written to continuously while the
+# browser runs.  Copying them while the browser is open causes race-condition
+# errors on Windows ("The system cannot find the file specified").  They are
+# pure caches and not needed for the copied profile to work.
+_VOLATILE_PROFILE_DIRS: frozenset[str] = frozenset({
+    "cache2", "startupCache", "thumbnails", "shader-cache",
+    "OfflineCache", "jumpListCache",
+})
+
+
+def safe_copytree(src: Path, dst: Path) -> None:
+    """Copy a browser profile directory while the browser may be open.
+
+    Two protections:
+    1. Skips volatile cache subdirectories that the running browser rewrites
+       constantly (``cache2``, ``startupCache``, etc.).
+    2. Uses a resilient per-file copy that silently ignores ``FileNotFoundError``
+       and ``PermissionError`` — on Windows, cache entries can vanish between
+       the directory listing and the actual copy when a concurrent browser
+       process is writing to the same profile.
+    """
+
+    def _copy_file(s: str, d: str) -> None:
+        try:
+            shutil.copy2(s, d)
+        except (FileNotFoundError, PermissionError, OSError):
+            pass  # file deleted or locked by the running browser — skip it
+
+    def _ignore_volatile(directory: str, contents: list[str]) -> set[str]:
+        if Path(directory) == src:
+            return _VOLATILE_PROFILE_DIRS & set(contents)
+        return set()
+
+    shutil.copytree(str(src), str(dst), copy_function=_copy_file, ignore=_ignore_volatile)
+
+
 def clear_profile_locks(profile_dir: Path) -> None:
     """Remove Firefox/Camoufox stale lock files left behind by crashed sessions.
 
@@ -122,7 +158,7 @@ def scrape_profile_context(config: dict[str, Any]):
         if tmp_profile.exists():
             shutil.rmtree(str(tmp_profile), ignore_errors=True)
         log_event("Copying persistent profile for scrape browser.", context={"source": str(main_profile), "dest": str(tmp_profile)})
-        shutil.copytree(str(main_profile), str(tmp_profile))
+        safe_copytree(main_profile, tmp_profile)
         kwargs["user_data_dir"] = str(tmp_profile)
         yield kwargs
     finally:

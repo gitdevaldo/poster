@@ -1,0 +1,108 @@
+10:04:25	INFO	Auto commenter started. — Template: post_1.yaml — groups: 2 — delay_min_min: 1 — delay_max_min: 1
+10:04:26	INFO	Copying persistent profile for comment browser.
+10:04:39	INFO	Applied session cookies to comment browser.
+10:04:39	INFO	Auto comment round 1 — 2 group(s).
+10:04:39	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:04:46	INFO	Auto comment: commenting on new post. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 930030743151635
+10:06:31	INFO	Auto comment: comment posted successfully. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 930030743151635
+10:06:31	INFO	Auto comment: waiting 1m 0s before next. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:06:38	INFO	Removed temporary comment profile copy.
+10:06:38	INFO	Auto commenter stopped.
+10:11:40	INFO	Auto commenter started. — Template: post_1.yaml — groups: 2 — delay_min_min: 1 — delay_max_min: 1
+10:11:41	INFO	Copying persistent profile for comment browser.
+10:12:00	INFO	Applied session cookies to comment browser.
+10:12:00	INFO	Auto comment round 1 — 2 group(s).
+10:12:00	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:12:07	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 930030743151635
+10:12:07	INFO	Auto comment: waiting 1m 0s before next. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:13:07	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:13:15	INFO	Auto comment: commenting on new post. — Group: Laravel Indonesia — post_id: 2091262498123154
+10:15:00	INFO	Auto comment: comment posted successfully. — Group: Laravel Indonesia — post_id: 2091262498123154
+10:15:00	INFO	Auto comment: waiting 1m 0s before next. — Group: Laravel Indonesia
+10:15:11	INFO	Removed temporary comment profile copy.
+10:15:11	INFO	Auto commenter stopped.
+10:29:37	INFO	Auto commenter started. — Template: post_4.yaml — groups: 2 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:29:38	INFO	Copying persistent profile for comment browser.
+10:30:00	INFO	Applied session cookies to comment browser.
+10:30:00	INFO	Auto comment round 1 — 2 group(s).
+10:30:00	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:30:09	INFO	Auto comment: commenting on new post. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 2091262498123154
+10:30:25	INFO	Auto comment: comment posted successfully. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 2091262498123154
+10:30:25	INFO	Auto comment: waiting 1m 0s before next. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:30:49	INFO	Removed temporary comment profile copy.
+10:30:49	INFO	Auto commenter stopped.
+10:34:23	INFO	Auto commenter started. — Template: post_4.yaml — groups: 2 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:34:24	INFO	Copying persistent profile for comment browser.
+10:34:42	INFO	Applied session cookies to comment browser.
+10:34:42	INFO	Auto comment round 1 — 2 group(s).
+10:34:42	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:34:48	INFO	Auto comment: commenting on new post. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 924602897027753
+10:34:59	INFO	Auto comment: comment posted successfully. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 924602897027753
+10:34:59	INFO	Auto comment: waiting 1m 0s before next. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:35:59	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:36:06	INFO	Auto comment: no post ID found on group page, skipping. — Group: Laravel Indonesia
+10:36:06	INFO	Auto comment round 2 — 2 group(s).
+10:36:06	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:36:13	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 924602897027753
+10:36:14	INFO	Removed temporary comment profile copy.
+10:36:14	INFO	Auto commenter stopped.
+10:41:26	INFO	Auto commenter started. — Template: post_4.yaml — groups: 2 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:41:27	INFO	Copying persistent profile for comment browser.
+10:42:10	INFO	Applied session cookies to comment browser.
+10:42:10	INFO	Auto comment round 1 — 2 group(s).
+10:42:10	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:42:18	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 924602897027753
+10:42:18	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:42:26	INFO	Auto comment: commenting on new post. — Group: Laravel Indonesia — post_id: 3613930038745326
+10:42:43	INFO	Auto comment: comment posted successfully. — Group: Laravel Indonesia — post_id: 3613930038745326
+10:42:43	INFO	Auto comment: waiting 1m 0s before next. — Group: Laravel Indonesia
+10:43:41	INFO	Removed temporary comment profile copy.
+10:43:41	INFO	Auto commenter stopped.
+10:48:33	INFO	Auto commenter started. — Template: post_4.yaml — groups: 2 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:48:34	INFO	Copying persistent profile for comment browser.
+10:49:01	INFO	Applied session cookies to comment browser.
+10:49:01	INFO	Auto comment round 1 — 2 group(s).
+10:49:01	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:49:08	INFO	Auto comment: commenting on new post. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:49:22	INFO	Auto comment: comment posted successfully. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:49:22	INFO	Auto comment: waiting 1m 0s before next. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:49:46	INFO	Removed temporary comment profile copy.
+10:49:46	INFO	Auto commenter stopped.
+10:52:00	INFO	Auto commenter started. — Template: post_4.yaml — groups: 2 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:52:01	INFO	Copying persistent profile for comment browser.
+10:52:17	INFO	Applied session cookies to comment browser.
+10:52:17	INFO	Auto comment round 1 — 2 group(s).
+10:52:17	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:52:25	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:52:25	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:52:33	INFO	Auto comment: already commented on latest post, skipping. — Group: Laravel Indonesia — post_id: 3613930038745326
+10:52:33	INFO	Auto comment round 2 — 2 group(s).
+10:52:33	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:52:40	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:52:40	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:52:47	INFO	Auto comment: already commented on latest post, skipping. — Group: Laravel Indonesia — post_id: 3613930038745326
+10:52:47	INFO	Auto comment round 3 — 2 group(s).
+10:52:47	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:52:54	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:52:54	INFO	Auto comment: visiting group. — Group: Laravel Indonesia
+10:53:03	INFO	Auto comment: no post ID found on group page, skipping. — Group: Laravel Indonesia
+10:53:04	INFO	Removed temporary comment profile copy.
+10:53:04	INFO	Auto commenter stopped.
+10:53:42	INFO	Auto commenter started. — Template: post_4.yaml — groups: 5 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+10:53:42	INFO	Copying persistent profile for comment browser.
+10:54:15	INFO	Applied session cookies to comment browser.
+10:54:15	INFO	Auto comment round 1 — 5 group(s).
+10:54:15	INFO	Auto comment: visiting group. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal
+10:54:22	INFO	Auto comment: already commented on latest post, skipping. — Group: 24 Jam Belajar Ngoding Jadi Programmer Handal — post_id: 925741143580595
+10:54:22	INFO	Auto comment: visiting group. — Group: CODEIGNITER Indonesia
+10:54:29	INFO	Auto comment: commenting on new post. — Group: CODEIGNITER Indonesia — post_id: 26777995921825366
+10:54:45	INFO	Auto comment: comment posted successfully. — Group: CODEIGNITER Indonesia — post_id: 26777995921825366
+10:54:45	INFO	Auto comment: waiting 1m 0s before next. — Group: CODEIGNITER Indonesia
+10:55:45	INFO	Auto comment: visiting group. — Group: CodeIgniter Indonesia ID
+10:55:51	INFO	Auto comment: no post ID found on group page, skipping. — Group: CodeIgniter Indonesia ID
+10:55:53	INFO	Removed temporary comment profile copy.
+10:55:53	INFO	Auto commenter stopped.
+11:42:59	INFO	Auto commenter started. — Template: post_4.yaml — groups: 5 — images: 1 — delay_min_min: 1 — delay_max_min: 1
+11:42:59	INFO	Copying persistent profile for comment browser.
+11:43:02	INFO	Removed temporary comment profile copy.
+11:43:02	ERROR	Auto commenter failed. — Error: Error — Detail: [('data\\accounts\\account-1\\camoufox_profile\\cache2\\entries\\4AED742E0B03F08CB8A4986CB91E262B39496D4C', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\cache2\\entries\\4AED742E0B03F08CB8A4986CB91E262B39496D4C', '[WinError 2] The system cannot find the file specified'), ('data\\accounts\\account-1\\camoufox_profile\\cache2\\entries\\4C8EF7CD0F57596AADB7ED6E42AF286E12268165', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\cache2\\entries\\4C8EF7CD0F57596AADB7ED6E42AF286E12268165', '[WinError 2] The system cannot find the file specified'), ('data\\accounts\\account-1\\camoufox_profile\\cache2\\entries\\B6EAA586906B403AD17BE8AAF5300FB2DB6F5798', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\cache2\\entries\\B6EAA586906B403AD17BE8AAF5300FB2DB6F5798', '[WinError 2] The system cannot find the file specified'), ('data\\accounts\\account-1\\camoufox_profile\\cache2\\entries\\B94E25BFADA4B8EC43F478661A8B0B6FFCD34B76', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\cache2\\entries\\B94E25BFADA4B8EC43F478661A8B0B6FFCD34B76', '[WinError 2] The system cannot find the file specified'), ('data\\accounts\\account-1\\camoufox_profile\\cache2\\entries\\EE540E3FC24EB7EAB4FBC30B3BA9A7575F81AD67', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\cache2\\entries\\EE540E3FC24EB7EAB4FBC30B3BA9A7575F81AD67', '[WinError 2] The system cannot find the file specified'), ('data\\accounts\\account-1\\camoufox_profile\\parent.lock', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\parent.lock', '[WinError 32] The process cannot access the file because it is being used by another process'), ('data\\accounts\\account-1\\camoufox_profile\\storage\\default\\https+++www.facebook.com\\idb\\785318678rbeds-psosnesniev.sqlite-shm', 'data\\accounts\\account-1\\camoufox_profile_tmp_comment\\storage\\default\\https+++www.facebook.com\\idb\\785318678rbeds-psosnesniev.sqlite-shm', '[WinError 33] The process cannot access the file because another process has locked a portion of the file')]

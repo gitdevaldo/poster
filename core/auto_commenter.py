@@ -21,7 +21,7 @@ from typing import Any, Generator
 
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
-from core.session_manager import clear_profile_locks
+from core.session_manager import clear_profile_locks, safe_copytree
 
 
 GROUP_LINK_RE = re.compile(r"facebook\.com/groups/([^/?#]+)", re.IGNORECASE)
@@ -80,7 +80,7 @@ def comment_profile_context(config: dict[str, Any]) -> Generator[dict[str, Any],
         if tmp_profile.exists():
             shutil.rmtree(str(tmp_profile), ignore_errors=True)
         log_event("Copying persistent profile for comment browser.")
-        shutil.copytree(str(main_profile), str(tmp_profile))
+        safe_copytree(main_profile, tmp_profile)
         kwargs["user_data_dir"] = str(tmp_profile)
         yield kwargs
     finally:
