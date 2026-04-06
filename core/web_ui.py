@@ -95,9 +95,12 @@ def _safe_zoneinfo(name: str) -> ZoneInfo | None:
         return None
 
 
+_DEFAULT_TZ = "Asia/Jakarta"
+
+
 def _normalize_schedule_rules(
     schedule_rules: dict[str, Any],
-    default_timezone: str,
+    default_timezone: str = _DEFAULT_TZ,
 ) -> tuple[bool, str, dict[str, Any]]:
     if not isinstance(schedule_rules, dict):
         return False, "Invalid schedule payload.", {}
@@ -106,7 +109,8 @@ def _normalize_schedule_rules(
     if schedule_type not in {"one_time", "daily", "weekly", "specific_datetime"}:
         return False, "Schedule type is invalid.", {}
 
-    timezone_name = str(schedule_rules.get("timezone", "")).strip() or default_timezone or "UTC"
+    # Timezone is always Asia/Jakarta; ignore whatever the client sends.
+    timezone_name = _DEFAULT_TZ
     tz = _safe_zoneinfo(timezone_name)
     if tz is None:
         return False, f"Invalid timezone '{timezone_name}'.", {}
@@ -115,7 +119,7 @@ def _normalize_schedule_rules(
         "enabled": True,
         "type": schedule_type,
         "timezone": timezone_name,
-        "dry_run": bool(schedule_rules.get("dry_run", False)),
+        "dry_run": False,  # always live
     }
 
     if schedule_type in {"one_time", "daily", "weekly"}:
@@ -150,6 +154,13 @@ def _normalize_schedule_rules(
         local_iso = local_dt.replace(second=0, microsecond=0).isoformat()
         normalized["specific_datetime"] = local_iso
         normalized["run_at"] = local_iso
+
+    # Optional comment-session window: time_to (HH:MM stop time)
+    time_to_raw = str(schedule_rules.get("time_to", "")).strip()
+    if time_to_raw:
+        ok2, _, parsed_to = _parse_hhmm(time_to_raw)
+        if ok2 and parsed_to is not None:
+            normalized["time_to"] = parsed_to.strftime("%H:%M")
 
     return True, "", normalized
 
@@ -1127,6 +1138,32 @@ class _WebState:
 
         return True, self.schedule_message
 
+    def enable_schedule(self, account_id: str, schedule_id: str) -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        target_id = schedule_id.strip()
+        if not target_id:
+            return False, "Schedule id is required."
+        schedules = _get_account_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No schedules found."
+        idx, current = _find_schedule_record(schedules, target_id)
+        if idx < 0 or not isinstance(current, dict):
+            return False, f"Schedule '{target_id}' not found."
+        updated = _ensure_schedule_record_defaults(
+            current, default_timezone=str(current.get("timezone", _DEFAULT_TZ)) or _DEFAULT_TZ, touch=True
+        )
+        updated["enabled"] = True
+        updated["last_status"] = "pending"
+        schedules[idx] = updated
+        if not _save_account_schedules(self.config_path, account, schedules):
+            return False, "Failed to update schedule config."
+        with self.lock:
+            self.schedule_message = f"Schedule '{target_id}' enabled."
+            self._mark_schedule_changed_locked()
+        return True, self.schedule_message
+
     def start_comment_schedule(self, account_id: str, schedule_rules: dict[str, Any]) -> tuple[bool, str]:
         account = account_id.strip()
         if not account:
@@ -1210,6 +1247,32 @@ class _WebState:
             return False, "Failed to delete comment schedule config."
         with self.lock:
             self.comment_schedule_message = f"Comment schedule '{target_id}' deleted."
+            self.comment_schedule_wake_event.set()
+        return True, self.comment_schedule_message
+
+    def enable_comment_schedule(self, account_id: str, schedule_id: str) -> tuple[bool, str]:
+        account = account_id.strip()
+        if not account:
+            return False, "Account id is required."
+        target_id = schedule_id.strip()
+        if not target_id:
+            return False, "Schedule id is required."
+        schedules = _get_account_comment_schedules(self.config_path, account)
+        if not schedules:
+            return False, "No comment schedules found."
+        idx, current = _find_schedule_record(schedules, target_id)
+        if idx < 0 or not isinstance(current, dict):
+            return False, f"Comment schedule '{target_id}' not found."
+        updated = _ensure_schedule_record_defaults(
+            current, default_timezone=str(current.get("timezone", _DEFAULT_TZ)) or _DEFAULT_TZ, touch=True
+        )
+        updated["enabled"] = True
+        updated["last_status"] = "pending"
+        schedules[idx] = updated
+        if not _save_account_comment_schedules(self.config_path, account, schedules):
+            return False, "Failed to update comment schedule config."
+        with self.lock:
+            self.comment_schedule_message = f"Comment schedule '{target_id}' enabled."
             self.comment_schedule_wake_event.set()
         return True, self.comment_schedule_message
 
@@ -2449,18 +2512,21 @@ def _render_page() -> str:
         <div class="settings-box" style="margin-top:10px">
           <div class="mini-lbl">Scheduler</div>
           <div class="frow">
-            <div class="field" style="min-width:180px;flex:2">
+            <div class="field" style="min-width:150px;flex:1">
               <label class="mini-lbl" for="schType">Type</label>
               <select id="schType">
-                <option value="one_time">One time (next occurrence)</option>
+                <option value="specific_datetime">One Time</option>
                 <option value="daily">Daily</option>
-                <option value="weekly">Weekly (select days)</option>
-                <option value="specific_datetime">Specific date & time</option>
+                <option value="weekly">Weekly</option>
               </select>
             </div>
-            <div class="field" style="min-width:140px;flex:1">
-              <label class="mini-lbl" for="schTime">Time</label>
-              <input id="schTime" type="time" value="09:00">
+            <div class="field" style="min-width:200px;flex:2" id="schDateTimeWrap">
+              <label class="mini-lbl" for="schDateTime">Date &amp; Time (WIB)</label>
+              <input id="schDateTime" type="datetime-local">
+            </div>
+            <div class="field" style="min-width:130px;flex:1;display:none" id="schTimeOnlyWrap">
+              <label class="mini-lbl" for="schTimeOnly">Time (WIB)</label>
+              <input id="schTimeOnly" type="time" value="09:00">
             </div>
           </div>
           <div class="frow" id="schWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px">
@@ -2472,28 +2538,9 @@ def _render_page() -> str:
             <label><input type="checkbox" class="schDay" value="5"> Sat</label>
             <label><input type="checkbox" class="schDay" value="6"> Sun</label>
           </div>
-          <div class="frow" id="schSpecificWrap" style="display:none">
-            <div class="field" style="min-width:220px;flex:1">
-              <label class="mini-lbl" for="schSpecificDateTime">Specific date & time</label>
-              <input id="schSpecificDateTime" type="datetime-local">
-            </div>
-          </div>
           <div class="frow">
-            <div class="field" style="min-width:180px;flex:1">
-              <label class="mini-lbl" for="schTimezone">Timezone</label>
-              <input id="schTimezone" type="text" placeholder="Asia/Jakarta">
-            </div>
-            <div class="field" style="min-width:140px;flex:1">
-              <label class="mini-lbl" for="schDryRun">Run Mode</label>
-              <select id="schDryRun">
-                <option value="false">Live</option>
-                <option value="true">Dry run</option>
-              </select>
-            </div>
-          </div>
-          <div class="frow">
-            <button id="startScheduleBtn" class="btn-primary" type="button">⏰ Start Schedule</button>
-            <button id="stopScheduleBtn" class="btn-red" type="button">■ Stop All</button>
+            <button id="startScheduleBtn" class="btn-primary" type="button">⏰ Add Schedule</button>
+            <button id="stopScheduleBtn" class="btn-red" type="button">■ Disable All</button>
           </div>
           <div id="scheduleInfo" class="mono" style="margin-top:6px">No schedule active.</div>
           <div id="scheduleRecords" class="schedule-records">
@@ -2565,18 +2612,25 @@ def _render_page() -> str:
       <div class="settings-box" style="margin-top:10px">
         <div class="mini-lbl">Scheduler</div>
         <div class="frow">
-          <div class="field" style="min-width:180px;flex:2">
+          <div class="field" style="min-width:150px;flex:1">
             <label class="mini-lbl" for="cmSchType">Type</label>
             <select id="cmSchType">
-              <option value="one_time">One time (next occurrence)</option>
+              <option value="specific_datetime">One Time</option>
               <option value="daily">Daily</option>
-              <option value="weekly">Weekly (select days)</option>
-              <option value="specific_datetime">Specific date &amp; time</option>
+              <option value="weekly">Weekly</option>
             </select>
           </div>
-          <div class="field" style="min-width:140px;flex:1">
-            <label class="mini-lbl" for="cmSchTime">Time</label>
-            <input id="cmSchTime" type="time" value="09:00">
+          <div class="field" style="min-width:180px;flex:2" id="cmSchDateFromWrap">
+            <label class="mini-lbl" for="cmSchDateFrom">From (date &amp; time, WIB)</label>
+            <input id="cmSchDateFrom" type="datetime-local">
+          </div>
+          <div class="field" style="min-width:120px;flex:1;display:none" id="cmSchTimeFromWrap">
+            <label class="mini-lbl" for="cmSchTimeFrom">From (WIB)</label>
+            <input id="cmSchTimeFrom" type="time" value="09:00">
+          </div>
+          <div class="field" style="min-width:110px;flex:1">
+            <label class="mini-lbl" for="cmSchTimeTo">To (WIB)</label>
+            <input id="cmSchTimeTo" type="time" value="22:00">
           </div>
         </div>
         <div class="frow" id="cmSchWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px">
@@ -2588,21 +2642,9 @@ def _render_page() -> str:
           <label><input type="checkbox" class="cmSchDay" value="5"> Sat</label>
           <label><input type="checkbox" class="cmSchDay" value="6"> Sun</label>
         </div>
-        <div class="frow" id="cmSchSpecificWrap" style="display:none">
-          <div class="field" style="min-width:220px;flex:1">
-            <label class="mini-lbl" for="cmSchSpecificDateTime">Specific date &amp; time</label>
-            <input id="cmSchSpecificDateTime" type="datetime-local">
-          </div>
-        </div>
         <div class="frow">
-          <div class="field" style="min-width:180px;flex:1">
-            <label class="mini-lbl" for="cmSchTimezone">Timezone</label>
-            <input id="cmSchTimezone" type="text" placeholder="Asia/Jakarta" style="color:var(--fg)">
-          </div>
-        </div>
-        <div class="frow">
-          <button id="cmStartScheduleBtn" class="btn-primary" type="button">⏰ Start Schedule</button>
-          <button id="cmStopScheduleBtn" class="btn-red" type="button">■ Stop All</button>
+          <button id="cmStartScheduleBtn" class="btn-primary" type="button">⏰ Add Schedule</button>
+          <button id="cmStopScheduleBtn" class="btn-red" type="button">■ Disable All</button>
         </div>
         <div id="cmScheduleInfo" class="mono" style="margin-top:6px">No comment schedule active.</div>
         <div id="cmScheduleRecords" class="schedule-records">
@@ -3584,50 +3626,65 @@ def _render_page() -> str:
   function updateScheduleTypeVisibility() {
     const type = (document.getElementById('schType').value || '').trim();
     const weekWrap = document.getElementById('schWeekdaysWrap');
-    const specificWrap = document.getElementById('schSpecificWrap');
-    const timeInput = document.getElementById('schTime');
-    weekWrap.style.display = type === 'weekly' ? 'flex' : 'none';
-    specificWrap.style.display = type === 'specific_datetime' ? 'flex' : 'none';
-    timeInput.disabled = type === 'specific_datetime';
+    const dateTimeWrap = document.getElementById('schDateTimeWrap');
+    const timeOnlyWrap = document.getElementById('schTimeOnlyWrap');
+    const isOneTime = (type === 'specific_datetime');
+    if (dateTimeWrap) dateTimeWrap.style.display = isOneTime ? '' : 'none';
+    if (timeOnlyWrap) timeOnlyWrap.style.display = isOneTime ? 'none' : '';
+    if (weekWrap) weekWrap.style.display = (type === 'weekly') ? 'flex' : 'none';
   }
 
   async function disableSchedule(scheduleId) {
-    if (!selectedAccount) {
-      toast('Please select an account first.', true);
-      return;
-    }
-    if (!scheduleId) {
-      toast('Invalid schedule id.', true);
-      return;
-    }
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
     await callAction('stop_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
   }
 
+  async function enableSchedule(scheduleId) {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
+    await callAction('enable_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
   async function deleteSchedule(scheduleId) {
-    if (!selectedAccount) {
-      toast('Please select an account first.', true);
-      return;
-    }
-    if (!scheduleId) {
-      toast('Invalid schedule id.', true);
-      return;
-    }
-    if (!confirm(`Delete schedule "${scheduleId}"? This cannot be undone.`)) {
-      return;
-    }
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
+    if (!confirm(`Delete schedule "${scheduleId}"? This cannot be undone.`)) return;
     await callAction('delete_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
+  function _fmtSchType(type) {
+    if (type === 'specific_datetime') return 'One Time';
+    if (type === 'daily') return 'Daily';
+    if (type === 'weekly') return 'Weekly';
+    return String(type || 'unknown');
+  }
+
+  function _schTimeInfo(item) {
+    const type = String(item.type || '');
+    if (type === 'specific_datetime') {
+      const raw = item.run_at || item.specific_datetime || '';
+      if (raw) { const m = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); return m ? m[1].replace('T', ' ') : raw.slice(0, 16); }
+      return '-';
+    }
+    const t = item.time || '';
+    if (type === 'weekly') {
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const dnames = (item.weekdays || []).map(d => days[d] || String(d)).join(', ');
+      return `${dnames} ${t}`;
+    }
+    return t;
   }
 
   function renderScheduleState(data) {
     const sch = data.schedule_control || {};
-    const saved = data.saved_schedule || {};
     const savedList = (data.saved_schedules || sch.records || []).slice();
     const info = document.getElementById('scheduleInfo');
     const startBtn = document.getElementById('startScheduleBtn');
     const stopBtn = document.getElementById('stopScheduleBtn');
     const listEl = document.getElementById('scheduleRecords');
     const active = !!sch.is_active;
-    const isSelectedSchedule = !!sch.is_selected_account;
+    const runningId = String(sch.running_schedule_id || sch.spec?.id || '');
     startBtn.disabled = false;
     const hasEnabled = savedList.some(item => !!item.enabled);
     stopBtn.disabled = !hasEnabled;
@@ -3636,10 +3693,8 @@ def _render_page() -> str:
     } else {
       const next = sch.next_run_at ? new Date(sch.next_run_at).toLocaleString() : '-';
       const last = sch.last_run_at ? new Date(sch.last_run_at).toLocaleString() : '-';
-      const mode = sch.dry_run ? 'dry' : 'live';
       const result = sch.last_result ? ` | Result: ${sch.last_result}` : '';
-      const owner = sch.account_id ? ` | Account: ${sch.account_id}` : '';
-      info.textContent = `Status: ${sch.status} | Next: ${next} | Last: ${last} | Mode: ${mode}${owner}${result}`;
+      info.textContent = `Status: ${sch.status} | Next: ${next} | Last: ${last}${result}`;
     }
 
     if (!savedList.length) {
@@ -3648,24 +3703,27 @@ def _render_page() -> str:
       const rows = savedList.map(item => {
         const id = String(item.id || '');
         const enabled = !!item.enabled;
-        const type = String(item.type || 'unknown');
-        const tz = String(item.timezone || 'UTC');
-        const mode = item.dry_run ? 'dry' : 'live';
+        const isRunning = active && runningId && runningId === id;
+        const typeLabel = _fmtSchType(item.type);
+        const timeInfo = _schTimeInfo(item);
         const next = item.next_run_at ? new Date(item.next_run_at).toLocaleString() : '-';
-        const last = item.last_run_at ? new Date(item.last_run_at).toLocaleString() : '-';
         const status = String(item.last_status || 'pending');
-        const badgeClass = enabled ? 'p-green' : 'p-gray';
+        const badgeClass = isRunning ? 'p-orange' : (enabled ? 'p-green' : 'p-gray');
+        const badgeLabel = isRunning ? '▶ Running' : (enabled ? 'Enabled' : 'Disabled');
+        const toggleBtn = enabled
+          ? `<button class="btn-red" type="button" onclick="disableSchedule('${esc(id)}')" title="Disable">Disable</button>`
+          : `<button class="btn-green" type="button" onclick="enableSchedule('${esc(id)}')" title="Enable">Enable</button>`;
         return `
           <div class="schedule-item">
             <div class="meta">
-              <strong>${esc(id)} · ${esc(type)}</strong>
-              <span>Next: ${esc(next)} | Last: ${esc(last)}</span>
-              <span>TZ: ${esc(tz)} | Mode: ${esc(mode)} | Status: ${esc(status)}</span>
+              <strong>${esc(typeLabel)}</strong>
+              <span>${esc(timeInfo)}</span>
+              <span>Next: ${esc(next)} · Status: ${esc(status)}</span>
             </div>
             <div class="actions">
-              <span class="pill ${badgeClass}">${enabled ? 'Enabled' : 'Disabled'}</span>
-              ${enabled ? `<button class="btn-red" type="button" onclick="disableSchedule('${esc(id)}')" title="Stop this schedule">Stop</button>` : ''}
-              <button class="btn-red" type="button" onclick="deleteSchedule('${esc(id)}')" title="Delete this schedule">🗑️</button>
+              <span class="pill ${badgeClass}">${badgeLabel}</span>
+              ${toggleBtn}
+              <button class="btn-red" type="button" onclick="deleteSchedule('${esc(id)}')" title="Delete">🗑️</button>
             </div>
           </div>
         `;
@@ -3673,38 +3731,29 @@ def _render_page() -> str:
       listEl.innerHTML = rows.join('');
     }
 
-    // Prefill schedule inputs only when backend spec changes.
+    // Prefill schedule inputs from the latest spec (only when it changes).
+    const isSelectedSchedule = !!sch.is_selected_account;
     let spec = {};
     if (isSelectedSchedule && sch && typeof sch.spec === 'object' && sch.spec.type) {
       spec = sch.spec;
-    } else if (saved && typeof saved === 'object' && saved.type) {
-      spec = saved;
     }
     const signature = `${selectedAccount || ''}::${JSON.stringify(spec || {})}`;
     if (Object.keys(spec).length > 0 && signature !== lastScheduleSpecSignature) {
-      document.getElementById('schType').value = String(spec.type || 'daily');
-      if (spec.time) document.getElementById('schTime').value = String(spec.time);
-      if (spec.timezone) {
-        document.getElementById('schTimezone').value = String(spec.timezone);
-      } else if ((data.browser || {}).timezone) {
-        document.getElementById('schTimezone').value = String((data.browser || {}).timezone);
-      }
-      document.getElementById('schDryRun').value = String(!!spec.dry_run);
-      if (spec.specific_datetime_input) {
-        document.getElementById('schSpecificDateTime').value = String(spec.specific_datetime_input);
-      } else if (spec.specific_datetime) {
-        // Fallback for stale state payloads; backend should usually provide specific_datetime_input.
-        const raw = String(spec.specific_datetime);
-        const m = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
-        if (m && m[1]) document.getElementById('schSpecificDateTime').value = m[1];
+      const typeEl = document.getElementById('schType');
+      if (typeEl && document.activeElement !== typeEl) typeEl.value = String(spec.type || 'specific_datetime');
+      if (spec.type === 'specific_datetime') {
+        const dtEl = document.getElementById('schDateTime');
+        const raw = spec.run_at || spec.specific_datetime || '';
+        if (dtEl && raw) { const m = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if (m) dtEl.value = m[1]; }
+      } else {
+        const tEl = document.getElementById('schTimeOnly');
+        if (tEl && spec.time && document.activeElement !== tEl) tEl.value = spec.time;
       }
       document.querySelectorAll('.schDay').forEach(el => {
         const day = parseInt(el.value || '-1', 10);
         el.checked = Array.isArray(spec.weekdays) ? spec.weekdays.includes(day) : false;
       });
       lastScheduleSpecSignature = signature;
-    } else if (!active && !document.getElementById('schTimezone').value && (data.browser || {}).timezone) {
-      document.getElementById('schTimezone').value = String((data.browser || {}).timezone);
     }
     updateScheduleTypeVisibility();
   }
@@ -3978,29 +4027,27 @@ def _render_page() -> str:
   });
   document.getElementById('schType').addEventListener('change', updateScheduleTypeVisibility);
   document.getElementById('startScheduleBtn').addEventListener('click', async () => {
-    if (!selectedAccount) {
-      toast('Please select an account first.', true);
-      return;
-    }
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
     const type = (document.getElementById('schType').value || '').trim();
-    const timeVal = (document.getElementById('schTime').value || '').trim();
-    const timezoneVal = (document.getElementById('schTimezone').value || '').trim();
-    const specificVal = (document.getElementById('schSpecificDateTime').value || '').trim();
-    const dryRun = document.getElementById('schDryRun').value === 'true';
+    let timeVal = '';
+    let specificVal = '';
+    if (type === 'specific_datetime') {
+      specificVal = (document.getElementById('schDateTime').value || '').trim();
+      if (!specificVal) { toast('Please set a date and time.', true); return; }
+    } else {
+      timeVal = (document.getElementById('schTimeOnly').value || '').trim();
+      if (!timeVal) { toast('Please set a time.', true); return; }
+    }
     const weekdays = Array.from(document.querySelectorAll('.schDay'))
       .filter(el => el.checked)
       .map(el => parseInt(el.value || '-1', 10))
       .filter(v => !Number.isNaN(v) && v >= 0 && v <= 6);
-
-    const payload = {
-      type,
-      time: timeVal,
-      timezone: timezoneVal,
-      specific_datetime: specificVal,
-      weekdays,
-      dry_run: dryRun,
-    };
-    await callAction('start_schedule', selectedAccount, '', '', payload);
+    if (type === 'weekly' && weekdays.length === 0) {
+      toast('Please select at least one day for a weekly schedule.', true); return;
+    }
+    await callAction('start_schedule', selectedAccount, '', '', {
+      type, time: timeVal, specific_datetime: specificVal, weekdays, dry_run: false,
+    });
   });
   document.getElementById('stopScheduleBtn').addEventListener('click', async () => {
     if (!selectedAccount) {
@@ -4318,17 +4365,24 @@ def _render_page() -> str:
   function cmUpdateScheduleTypeVisibility() {
     const type = (document.getElementById('cmSchType').value || '').trim();
     const weekWrap = document.getElementById('cmSchWeekdaysWrap');
-    const specificWrap = document.getElementById('cmSchSpecificWrap');
-    const timeInput = document.getElementById('cmSchTime');
-    weekWrap.style.display = type === 'weekly' ? 'flex' : 'none';
-    specificWrap.style.display = type === 'specific_datetime' ? 'flex' : 'none';
-    timeInput.disabled = type === 'specific_datetime';
+    const dateFromWrap = document.getElementById('cmSchDateFromWrap');
+    const timeFromWrap = document.getElementById('cmSchTimeFromWrap');
+    const isOneTime = (type === 'specific_datetime');
+    if (dateFromWrap) dateFromWrap.style.display = isOneTime ? '' : 'none';
+    if (timeFromWrap) timeFromWrap.style.display = isOneTime ? 'none' : '';
+    if (weekWrap) weekWrap.style.display = (type === 'weekly') ? 'flex' : 'none';
   }
 
   async function disableCommentSchedule(scheduleId) {
     if (!selectedAccount) { toast('Please select an account first.', true); return; }
     if (!scheduleId) { toast('Invalid schedule id.', true); return; }
     await callAction('stop_comment_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
+  }
+
+  async function enableCommentSchedule(scheduleId) {
+    if (!selectedAccount) { toast('Please select an account first.', true); return; }
+    if (!scheduleId) { toast('Invalid schedule id.', true); return; }
+    await callAction('enable_comment_schedule', selectedAccount, '', '', { schedule_id: scheduleId });
   }
 
   async function deleteCommentSchedule(scheduleId) {
@@ -4348,10 +4402,11 @@ def _render_page() -> str:
     const stopBtn = document.getElementById('cmStopScheduleBtn');
     const listEl = document.getElementById('cmScheduleRecords');
     if (!info) return;
+    const active = !!sch.is_active;
+    const runningId = String(sch.running_schedule_id || sch.spec?.id || '');
     const hasEnabled = savedList.some(item => !!item.enabled);
     if (startBtn) startBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = !hasEnabled;
-    const active = !!sch.is_active;
     if (!active) {
       info.textContent = sch.message || (hasEnabled ? 'Comment schedules saved and waiting.' : 'No comment schedule active.');
     } else {
@@ -4365,48 +4420,62 @@ def _render_page() -> str:
       const rows = savedList.map(item => {
         const id = String(item.id || '');
         const enabled = !!item.enabled;
-        const type = String(item.type || 'unknown');
-        const tz = String(item.timezone || 'UTC');
+        const isRunning = active && runningId && runningId === id;
+        const typeLabel = _fmtSchType(item.type);
+        const timeInfo = _schTimeInfo(item);
+        const timeTo = item.time_to ? ` → ${item.time_to}` : '';
         const next = item.next_run_at ? new Date(item.next_run_at).toLocaleString() : '-';
-        const last = item.last_run_at ? new Date(item.last_run_at).toLocaleString() : '-';
         const status = String(item.last_status || 'pending');
-        const badgeClass = enabled ? 'p-green' : 'p-gray';
+        const badgeClass = isRunning ? 'p-orange' : (enabled ? 'p-green' : 'p-gray');
+        const badgeLabel = isRunning ? '▶ Running' : (enabled ? 'Enabled' : 'Disabled');
+        const toggleBtn = enabled
+          ? `<button class="btn-red" type="button" onclick="disableCommentSchedule('${esc(id)}')" title="Disable">Disable</button>`
+          : `<button class="btn-green" type="button" onclick="enableCommentSchedule('${esc(id)}')" title="Enable">Enable</button>`;
         return `
           <div class="schedule-item">
             <div class="meta">
-              <strong>${esc(id)} · ${esc(type)}</strong>
-              <span>Next: ${esc(next)} | Last: ${esc(last)}</span>
-              <span>TZ: ${esc(tz)} | Status: ${esc(status)}</span>
+              <strong>${esc(typeLabel)}</strong>
+              <span>${esc(timeInfo)}${esc(timeTo)}</span>
+              <span>Next: ${esc(next)} · Status: ${esc(status)}</span>
             </div>
             <div class="actions">
-              <span class="pill ${badgeClass}">${enabled ? 'Enabled' : 'Disabled'}</span>
-              ${enabled ? `<button class="btn-red" type="button" onclick="disableCommentSchedule('${esc(id)}')" title="Stop this schedule">Stop</button>` : ''}
-              <button class="btn-red" type="button" onclick="deleteCommentSchedule('${esc(id)}')" title="Delete this schedule">🗑️</button>
+              <span class="pill ${badgeClass}">${badgeLabel}</span>
+              ${toggleBtn}
+              <button class="btn-red" type="button" onclick="deleteCommentSchedule('${esc(id)}')" title="Delete">🗑️</button>
             </div>
           </div>
         `;
       });
       listEl.innerHTML = rows.join('');
     }
-    // Pre-fill inputs from latest enabled schedule spec
+    // Pre-fill inputs from active spec (only on change).
     const isSelectedSchedule = !!sch.is_selected_account;
     let spec = {};
     if (isSelectedSchedule && sch.spec && typeof sch.spec === 'object' && sch.spec.type) {
       spec = sch.spec;
-    } else {
-      const enabledRecord = savedList.find(r => r.enabled);
-      if (enabledRecord && enabledRecord.type) spec = enabledRecord;
     }
     const sig = `${selectedAccount || ''}::${JSON.stringify(spec)}`;
     if (sig !== lastCmScheduleSpecSignature) {
       lastCmScheduleSpecSignature = sig;
       if (spec.type) {
         const typeEl = document.getElementById('cmSchType');
-        const timeEl = document.getElementById('cmSchTime');
-        const tzEl = document.getElementById('cmSchTimezone');
         if (typeEl && document.activeElement !== typeEl) typeEl.value = spec.type;
-        if (timeEl && document.activeElement !== timeEl) timeEl.value = spec.time || '09:00';
-        if (tzEl && document.activeElement !== tzEl) tzEl.value = spec.timezone || '';
+        if (spec.type === 'specific_datetime') {
+          const dtEl = document.getElementById('cmSchDateFrom');
+          const raw = spec.run_at || spec.specific_datetime || '';
+          if (dtEl && raw) { const m = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/); if (m) dtEl.value = m[1]; }
+        } else {
+          const fromEl = document.getElementById('cmSchTimeFrom');
+          if (fromEl && spec.time && document.activeElement !== fromEl) fromEl.value = spec.time;
+        }
+        if (spec.time_to) {
+          const toEl = document.getElementById('cmSchTimeTo');
+          if (toEl && document.activeElement !== toEl) toEl.value = spec.time_to;
+        }
+        document.querySelectorAll('.cmSchDay').forEach(el => {
+          const day = parseInt(el.value || '-1', 10);
+          el.checked = Array.isArray(spec.weekdays) ? spec.weekdays.includes(day) : false;
+        });
         cmUpdateScheduleTypeVisibility();
       }
     }
@@ -4510,15 +4579,27 @@ def _render_page() -> str:
   document.getElementById('cmStartScheduleBtn').addEventListener('click', async () => {
     if (!selectedAccount) { toast('Please select an account first.', true); return; }
     const type = (document.getElementById('cmSchType').value || '').trim();
-    const timeVal = (document.getElementById('cmSchTime').value || '').trim();
-    const timezoneVal = (document.getElementById('cmSchTimezone').value || '').trim();
-    const specificVal = (document.getElementById('cmSchSpecificDateTime').value || '').trim();
+    let timeVal = '';
+    let specificVal = '';
+    if (type === 'specific_datetime') {
+      specificVal = (document.getElementById('cmSchDateFrom').value || '').trim();
+      if (!specificVal) { toast('Please set a date and time.', true); return; }
+      // time is derived from the datetime-local value
+      timeVal = specificVal.includes('T') ? specificVal.split('T')[1].slice(0, 5) : '09:00';
+    } else {
+      timeVal = (document.getElementById('cmSchTimeFrom').value || '').trim();
+      if (!timeVal) { toast('Please set a start time.', true); return; }
+    }
+    const timeTo = (document.getElementById('cmSchTimeTo').value || '').trim();
     const weekdays = Array.from(document.querySelectorAll('.cmSchDay'))
       .filter(el => el.checked)
       .map(el => parseInt(el.value || '-1', 10))
       .filter(v => !Number.isNaN(v) && v >= 0 && v <= 6);
+    if (type === 'weekly' && weekdays.length === 0) {
+      toast('Please select at least one day for a weekly schedule.', true); return;
+    }
     await callAction('start_comment_schedule', selectedAccount, '', '', {
-      type, time: timeVal, timezone: timezoneVal, specific_datetime: specificVal, weekdays
+      type, time: timeVal, specific_datetime: specificVal, weekdays, time_to: timeTo, dry_run: false,
     });
   });
   document.getElementById('cmStopScheduleBtn').addEventListener('click', async () => {
@@ -4574,7 +4655,6 @@ def _render_page() -> str:
     }
   }
 
-  document.getElementById('schTimezone').value = 'Asia/Jakarta';
   updateScheduleTypeVisibility();
   lastScheduleSpecSignature = '';
   initLogAutoScrollSetting();
@@ -4841,6 +4921,8 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   "start_comment_schedule",
                   "stop_comment_schedule",
                   "delete_comment_schedule",
+                  "enable_schedule",
+                  "enable_comment_schedule",
                 }
                 if not account_id and action not in global_actions:
                     self._send_json({"ok": False, "error": "Account id is required."}, status=400)
@@ -4880,6 +4962,12 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                   elif action == "delete_comment_schedule":
                     schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
                     ok, result = state.delete_comment_schedule(account_id, schedule_id)
+                  elif action == "enable_schedule":
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.enable_schedule(account_id, schedule_id)
+                  elif action == "enable_comment_schedule":
+                    schedule_id = str(template_data.get("schedule_id", "")).strip() if isinstance(template_data, dict) else ""
+                    ok, result = state.enable_comment_schedule(account_id, schedule_id)
                   else:
                     ok, result = _execute_account_action(
                       state.config_path,

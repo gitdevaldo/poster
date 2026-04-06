@@ -1,0 +1,39 @@
+10:05:38	INFO	Auto-skip: skipped 33 already-posted groups. — Skipped: 33
+10:05:39	INFO	Reusing existing session without pre-validation.
+10:05:39	INFO	Scheduler started. — Template: post_4.yaml — eligible_groups: 54 — dry_run: False
+10:05:54	INFO	Processing group 1/54: Adsense Secret Indonesia — Group: Adsense Secret Indonesia — progress: 1 — total: 54
+10:05:54	INFO	Posting step: open group page. — Group: Adsense Secret Indonesia
+10:06:00	INFO	Group is paused, skipping. — Group: Adsense Secret Indonesia
+10:06:00	WARNING	Post skipped/failed. — Group: Adsense Secret Indonesia — Template: post_4.yaml — detail: GROUP_PAUSED — dry_run: False
+10:07:02	INFO	Processing group 2/54: Discover — Group: Discover — progress: 2 — total: 54
+10:07:02	INFO	Posting step: open group page. — Group: Discover
+10:07:32	INFO	Failed to open post composer — Group: Discover — Reason: Could not open group composer
+10:07:35	INFO	Posting step: open group page. — Group: Discover
+10:08:04	INFO	Failed to open post composer — Group: Discover — Reason: Could not open group composer
+10:08:04	WARNING	Post skipped/failed. — Group: Discover — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+10:09:05	INFO	Processing group 3/54: Email Blasting — Group: Email Blasting — progress: 3 — total: 54
+10:09:05	INFO	Posting step: open group page. — Group: Email Blasting
+10:09:18	INFO	Failed to open post composer — Group: Email Blasting — Reason: Could not open group composer
+10:09:21	INFO	Posting step: open group page. — Group: Email Blasting
+10:09:40	INFO	Failed to open post composer — Group: Email Blasting — Reason: Could not open group composer
+10:09:40	WARNING	Post skipped/failed. — Group: Email Blasting — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+10:10:40	INFO	Processing group 4/54: Free SMTP Servers for Sending Emails — Group: Free SMTP Servers for Sending Emails — progress: 4 — total: 54
+10:10:40	INFO	Posting step: open group page. — Group: Free SMTP Servers for Sending Emails
+10:10:59	INFO	Failed to open post composer — Group: Free SMTP Servers for Sending Emails — Reason: Could not open group composer
+10:11:02	INFO	Posting step: open group page. — Group: Free SMTP Servers for Sending Emails
+10:11:17	ERROR	Scheduler failed unexpectedly. — Error: TargetClosedError — Detail: Page.wait_for_timeout: Target page, context or browser has been closed
+10:56:27	INFO	Auto-skip: skipped 33 already-posted groups. — Skipped: 33
+10:56:27	INFO	Reusing existing session without pre-validation.
+10:56:27	INFO	Scheduler started. — Template: post_4.yaml — eligible_groups: 54 — dry_run: False
+10:59:58	ERROR	Scheduler failed unexpectedly. — Error: TimeoutError — Detail: BrowserType.launch_persistent_context: Timeout 180000ms exceeded.
+Call log:
+- <launching> C:\Users\Administrator\AppData\Local\camoufox\camoufox\Cache\camoufox.exe -no-remote -wait-for-browser -foreground -profile C:\Users\Administrator\Desktop\fbpost\data\accounts\account-1\camoufox_profile -juggler-pipe about:blank
+- <launched> pid=8548
+- [pid=8548][err] DEBUG: Juggler pipe initialized
+- [pid=8548][err] DEBUG: Dispatcher created
+- [pid=8548][err] DEBUG: BrowserHandler created
+- [pid=8548][err] DEBUG: BrowserHandler set as root session handler
+- [pid=8548][out]
+- [pid=8548][out] Juggler listening to the pipe
+- [pid=8548][out] console.error: "Warning: unrecognized command line flag" "-foreground"
+- [pid=8548][err] DEBUG: Installed 1 addon(s)
