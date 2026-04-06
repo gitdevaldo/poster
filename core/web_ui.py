@@ -31,7 +31,7 @@ from core.account_manager import (
 from core.auto_commenter import run_auto_commenter
 from core.config_loader import ACCOUNT_ENV_VAR, load_config
 from core.group_scraper import scrape_groups
-from core.logger import get_log_file
+from core.logger import get_log_file, set_log_source
 from core.post_queue import load_templates
 from core.preset_manager import (
     list_presets,
@@ -954,6 +954,7 @@ class _WebState:
         self.runner_message = ""
 
         def _worker() -> None:
+            set_log_source("poster")
             error_message = ""
             try:
                 with _account_env(account):
@@ -1248,6 +1249,7 @@ class _WebState:
         self.commenter_message = ""
 
         def _commenter_worker() -> None:
+            set_log_source("commenter")
             error_message = ""
             try:
                 with _account_env(account):
@@ -1710,16 +1712,19 @@ def _read_live_logs(limit: int = 200) -> list[dict[str, str]]:
             ctx_str = _format_context(context)
             if ctx_str:
               message = f"{message}  —  {ctx_str}"
+          source = str(payload.get("source", "")).strip()
           rows.append({
             "timestamp": timestamp,
             "level": level,
             "message": message,
+            "source": source,
           })
         except Exception:
           rows.append({
             "timestamp": "",
             "level": "INFO",
             "message": line,
+            "source": "",
           })
   except Exception:
     return []
@@ -3114,7 +3119,6 @@ def _render_page() -> str:
       const wrap = document.getElementById('liveLogWrap');
       wrap.scrollTop = wrap.scrollHeight;
     }
-    if (typeof syncCmLogs === 'function') syncCmLogs(rows);
   }
 
   function updatePostProgressFromLogs(rows) {
@@ -3156,6 +3160,7 @@ def _render_page() -> str:
       const data = await res.json();
       logsSnapshot = data.logs || [];
       renderLiveLogs(logsSnapshot);
+      syncCmLogs(data.commenter_logs || []);
     } catch {
       // Keep last rendered logs if fetch temporarily fails.
     }
@@ -4776,7 +4781,14 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
               limit = int(limit_raw)
             except Exception:
               limit = 200
-            self._send_json({"ok": True, "logs": _read_live_logs(limit)})
+            all_logs = _read_live_logs(limit)
+            poster_logs = [r for r in all_logs if r.get("source") != "commenter"]
+            commenter_logs = [r for r in all_logs if r.get("source") == "commenter"]
+            self._send_json({
+              "ok": True,
+              "logs": poster_logs,
+              "commenter_logs": commenter_logs,
+            })
             return
           if parsed.path == "/":
             self._send_html(_render_page())

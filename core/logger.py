@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from datetime import datetime
 import json
 from pathlib import Path
 from typing import Any
+
+
+_log_source: ContextVar[str] = ContextVar("_log_source", default="")
+
+
+def set_log_source(source: str) -> None:
+    _log_source.set(source)
 
 
 def get_log_file(base_dir: Path = Path("logs")) -> Path:
@@ -19,6 +27,9 @@ def log_event(message: str, *, level: str = "INFO", context: dict[str, Any] | No
         "level": level.upper(),
         "message": message.strip(),
     }
+    src = _log_source.get("")
+    if src:
+        entry["source"] = src
     if context:
         entry["context"] = context
 
