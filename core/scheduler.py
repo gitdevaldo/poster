@@ -14,6 +14,7 @@ from core.logger import log_event, log_exception
 from core.post_queue import load_templates
 from core.session_manager import (
     camoufox_kwargs,
+    clear_profile_locks,
     configure_page_window,
     ensure_logged_in_in_page,
     ensure_session,
@@ -769,14 +770,18 @@ def run_scheduler(
 
     posted_count = 0
     stop_requested = False
+    run_label = "Run" if run_once else "Scheduler"
     log_event(
-        "Scheduler started.",
+        f"{run_label} started.",
         context={
             "template": selected_template_file,
             "eligible_groups": len(eligible_groups),
             "dry_run": dry_run,
         },
     )
+
+    profile_dir = Path(str(kwargs.get("user_data_dir", "")))
+    clear_profile_locks(profile_dir)
 
     try:
         with Camoufox(**kwargs) as browser:

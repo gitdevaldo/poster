@@ -34,6 +34,26 @@ def _persistent_profile_dir_from_config(config: dict[str, Any]) -> Path:
     return Path(profile_dir)
 
 
+def clear_profile_locks(profile_dir: Path) -> None:
+    """Remove Firefox/Camoufox stale lock files left behind by crashed sessions.
+
+    Firefox writes ``lock`` (symlink on POSIX), ``.parentlock``, and
+    ``parent.lock`` into the profile when a browser instance starts.  If the
+    process is killed or crashes those files are never cleaned up, causing the
+    *next* launch to stall until the 180-second timeout fires.  Deleting them
+    before every launch is safe — a running instance re-creates them
+    immediately.
+    """
+    for name in ("lock", ".parentlock", "parent.lock"):
+        target = profile_dir / name
+        try:
+            if target.is_symlink() or target.exists():
+                target.unlink(missing_ok=True)
+                log_event(f"Removed stale browser lock: {name}", level="DEBUG")
+        except Exception:
+            pass
+
+
 def camoufox_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     browser_cfg = config.get("browser", {})
     camoufox_cfg = config.get("camoufox", {})
@@ -360,6 +380,7 @@ def ensure_session(
         return session_path
 
     log_event("Launching Camoufox for manual login setup.")
+    clear_profile_locks(Path(str(kwargs.get("user_data_dir", ""))))
     with Camoufox(**kwargs) as browser:
         page = get_or_create_page(browser)
         configure_page_window(page, config)
@@ -386,6 +407,7 @@ def validate_session(config_path: Path) -> bool:
 
     try:
         with scrape_profile_context(config) as kwargs:
+            clear_profile_locks(Path(str(kwargs.get("user_data_dir", ""))))
             with Camoufox(**kwargs) as browser:
                 page = get_or_create_page(browser)
                 configure_page_window(page, config)

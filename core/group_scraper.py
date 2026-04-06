@@ -9,6 +9,7 @@ from typing import Any
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
 from core.session_manager import (
+    clear_profile_locks,
     configure_page_window,
     ensure_logged_in_in_page,
     ensure_session,
@@ -413,6 +414,7 @@ def scrape_groups(config_path: Path, force: bool = False) -> Path:
 
     try:
         with scrape_profile_context(config) as kwargs:
+            clear_profile_locks(Path(str(kwargs.get("user_data_dir", ""))))
             with Camoufox(**kwargs) as browser:
                 page = get_or_create_page(browser)
                 configure_page_window(page, config)

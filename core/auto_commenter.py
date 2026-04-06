@@ -21,6 +21,7 @@ from typing import Any, Generator
 
 from core.config_loader import load_config
 from core.logger import log_event, log_exception
+from core.session_manager import clear_profile_locks
 
 
 GROUP_LINK_RE = re.compile(r"facebook\.com/groups/([^/?#]+)", re.IGNORECASE)
@@ -433,6 +434,7 @@ def run_auto_commenter(
 
     try:
         with comment_profile_context(config) as launch_kwargs:
+            clear_profile_locks(Path(str(launch_kwargs.get("user_data_dir", ""))))
             with Camoufox(**launch_kwargs) as browser:
                 page = browser.new_page()
 
