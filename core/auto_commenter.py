@@ -186,7 +186,13 @@ def _do_comment(page: Any, text: str) -> bool:
         page.wait_for_timeout(random.randint(400, 900))
 
         for char in text:
-            page.keyboard.type(char, delay=random.randint(25, 90))
+            if char == "\n":
+                # Shift+Enter inserts a line break inside the comment box;
+                # bare Enter would submit the comment prematurely.
+                page.keyboard.press("Shift+Enter")
+                page.wait_for_timeout(random.randint(60, 150))
+            else:
+                page.keyboard.type(char, delay=random.randint(25, 90))
 
         page.wait_for_timeout(random.randint(500, 1000))
         page.keyboard.press("Enter")
