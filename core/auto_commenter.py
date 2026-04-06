@@ -259,8 +259,9 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
         comment_input.click(timeout=4000)
         page.wait_for_timeout(random.randint(400, 800))
 
-        # Copy the entire template to the browser clipboard via execCommand,
-        # then paste it all at once with Ctrl+V — newlines included.
+        # Copy the entire template to clipboard via execCommand (sync, no async
+        # clipboard API). Creating the textarea briefly steals focus, so we
+        # re-click the comment input before Ctrl+V to restore it.
         page.evaluate(
             """(t) => {
                 const el = document.createElement('textarea');
@@ -272,6 +273,8 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
             }""",
             text,
         )
+        comment_input.click(timeout=3000)          # restore focus after JS stole it
+        page.wait_for_timeout(200)
         page.keyboard.press("Control+v")
         page.wait_for_timeout(random.randint(400, 700))
 
