@@ -189,7 +189,8 @@ def _collect_template_images(template: dict[str, Any]) -> list[str]:
 
 
 def _attach_comment_image(page: Any, image_paths: list[str]) -> bool:
-    """Attach images to a Facebook comment via the photo button in the comment toolbar."""
+    """Attach images to a Facebook comment using expect_file_chooser so the
+    OS file dialog never appears — Playwright intercepts and sets files directly."""
     if not image_paths:
         return True
 
@@ -211,23 +212,18 @@ def _attach_comment_image(page: Any, image_paths: list[str]) -> bool:
     ]
 
     try:
-        # Try to find and click the photo button in the comment toolbar
         for sel in photo_btn_selectors:
             try:
                 btn = page.locator(sel)
                 if btn.count() > 0 and btn.first.is_visible(timeout=500):
-                    btn.first.click(timeout=3000)
-                    page.wait_for_timeout(1200)
-                    break
+                    # Intercept the file chooser so the OS dialog never opens
+                    with page.expect_file_chooser(timeout=5000) as fc_info:
+                        btn.first.click(timeout=3000)
+                    fc_info.value.set_files(resolved)
+                    page.wait_for_timeout(2500)
+                    return True
             except Exception:
                 continue
-
-        # Set the file on the file input
-        file_input = page.locator("input[type='file']")
-        if file_input.count() > 0:
-            file_input.first.set_input_files(resolved, timeout=8000)
-            page.wait_for_timeout(2500)
-            return True
     except Exception as exc:
         log_exception("Failed to attach comment image.", exc)
     return False
@@ -236,7 +232,8 @@ def _attach_comment_image(page: Any, image_paths: list[str]) -> bool:
 def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> bool:
     """Find the comment input for the top post and submit a comment.
 
-    Uses insert_text for fast paste-like input (no per-character delay).
+    Copies the full text to the browser clipboard in one shot then Ctrl+V
+    pastes it — preserving newlines without any line-by-line loop.
     Returns True if comment was successfully submitted.
     """
     _scroll_to_reveal_comments(page)
@@ -251,19 +248,23 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
         comment_input.click(timeout=4000)
         page.wait_for_timeout(random.randint(400, 800))
 
-        # Paste text segment-by-segment — insert_text bypasses key events so
-        # \n won't trigger a submit; Shift+Enter inserts a visible line break.
-        segments = text.split("\n")
-        for i, segment in enumerate(segments):
-            if segment:
-                page.keyboard.insert_text(segment)
-            if i < len(segments) - 1:
-                page.keyboard.press("Shift+Enter")
-                page.wait_for_timeout(random.randint(40, 100))
-
+        # Write the entire template text to the clipboard via JS (one shot),
+        # then paste with Ctrl+V — no line-by-line loop, no char typing.
+        page.evaluate(
+            """(t) => {
+                const el = document.createElement('textarea');
+                el.value = t;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+            }""",
+            text,
+        )
+        page.keyboard.press("Control+v")
         page.wait_for_timeout(random.randint(300, 600))
 
-        # Attach images if present
+        # Attach images if present (no OS dialog)
         if image_paths:
             _attach_comment_image(page, image_paths)
 
