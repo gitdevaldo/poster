@@ -3091,7 +3091,7 @@ def _render_page() -> str:
     const value = String(ts || '').trim();
     if (!value) return '-';
     const part = value.split('T')[1] || value;
-    return part.replace('Z', '');
+    return part.replace('Z', '').replace(/[+-]\d{2}:\d{2}$/, '');
   }
 
   function renderLiveLogs(rows) {

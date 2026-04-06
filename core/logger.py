@@ -5,6 +5,9 @@ from datetime import datetime
 import json
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
+
+_WIB = ZoneInfo("Asia/Jakarta")
 
 
 _log_source: ContextVar[str] = ContextVar("_log_source", default="")
@@ -16,12 +19,12 @@ def set_log_source(source: str) -> None:
 
 def get_log_file(base_dir: Path = Path("logs")) -> Path:
     base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / f"session_{datetime.now():%Y%m%d}.log"
+    return base_dir / f"session_{datetime.now(_WIB):%Y%m%d}.log"
 
 
 def log_event(message: str, *, level: str = "INFO", context: dict[str, Any] | None = None) -> None:
     log_path = get_log_file()
-    timestamp = datetime.now().isoformat(timespec="seconds")
+    timestamp = datetime.now(_WIB).isoformat(timespec="seconds")
     entry: dict[str, Any] = {
         "timestamp": timestamp,
         "level": level.upper(),

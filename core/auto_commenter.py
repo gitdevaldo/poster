@@ -55,6 +55,7 @@ def _camoufox_launch_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     profile_dir = _persistent_profile_dir(config)
     if profile_dir:
         kwargs["user_data_dir"] = str(profile_dir)
+        kwargs["persistent_context"] = True
 
     return kwargs
 
