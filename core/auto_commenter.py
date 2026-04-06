@@ -262,13 +262,18 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
             text,
         )
         page.keyboard.press("Control+v")
-        page.wait_for_timeout(random.randint(300, 600))
+        page.wait_for_timeout(random.randint(500, 800))
 
-        # Attach images if present (no OS dialog)
+        # Attach images if present (no OS dialog).
+        # After the file is set Facebook renders a preview and the comment box
+        # loses focus — re-click it and wait before pressing Enter.
         if image_paths:
             _attach_comment_image(page, image_paths)
+            page.wait_for_timeout(random.randint(2000, 3000))  # wait for preview
+            comment_input.click(timeout=4000)  # re-focus the box
+            page.wait_for_timeout(random.randint(400, 700))
 
-        page.wait_for_timeout(random.randint(400, 800))
+        page.wait_for_timeout(random.randint(300, 600))
         page.keyboard.press("Enter")
         page.wait_for_timeout(random.randint(1500, 3000))
         return True
