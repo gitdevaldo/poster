@@ -49,8 +49,8 @@ error_handling:
   retry_backoff_seconds: 3
   screenshot_on_failure: true
   mark_inactive_on_404: true
-  pause_on_captcha: true
-  stop_on_rate_limit: true
+  pause_on_captcha: false
+  stop_on_rate_limit: false
   captcha_keywords:
   - captcha
   - checkpoint

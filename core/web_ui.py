@@ -1446,7 +1446,10 @@ def _build_state(
         "groups": group_items,
         "posting": posting_cfg,
       "global_groups": dict(effective_cfg.get("groups", {})) if isinstance(effective_cfg.get("groups"), dict) else {},
-      "global_posting": dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {},
+      "global_posting": {
+        **(dict(effective_cfg.get("posting", {})) if isinstance(effective_cfg.get("posting"), dict) else {}),
+        **{k: v for k, v in (dict(effective_cfg.get("error_handling", {})) if isinstance(effective_cfg.get("error_handling"), dict) else {}).items() if k in ("pause_on_captcha", "stop_on_rate_limit")},
+      },
         "browser": dict(effective_cfg.get("browser", {})) if isinstance(effective_cfg.get("browser"), dict) else {},
         "templates": templates,
       "run_control": runner_state or {
@@ -1573,6 +1576,7 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
         "rest_duration_minutes",
     }
     bool_fields = {"dry_run", "auto_skip"}
+    error_bool_fields = {"pause_on_captcha", "stop_on_rate_limit"}
     str_fields = {"template_file"}
 
     for key in int_fields:
@@ -1603,6 +1607,13 @@ def _update_posting_rules(config_path: Path, posting_rules: dict[str, Any]) -> t
         return False, "'min_delay_minutes' cannot be greater than 'max_delay_minutes'."
 
     config["posting"] = posting_cfg
+
+    error_cfg = dict(config.get("error_handling", {})) if isinstance(config.get("error_handling"), dict) else {}
+    for key in error_bool_fields:
+        if key in posting_rules:
+            error_cfg[key] = bool(posting_rules.get(key))
+    config["error_handling"] = error_cfg
+
     save_raw_config(config_path, config)
     return True, "Global posting rules updated."
 
@@ -2921,6 +2932,20 @@ def _render_page() -> str:
             <option value="false">false</option>
           </select>
         </div>
+        <div class="field">
+          <label class="mini-lbl" for="prPauseOnCaptcha">Stop On CAPTCHA</label>
+          <select id="prPauseOnCaptcha">
+            <option value="false">false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="mini-lbl" for="prStopOnRateLimit">Stop On Rate Limit</label>
+          <select id="prStopOnRateLimit">
+            <option value="false">false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
       </div>
       <div class="frow">
         <button id="savePostingRulesBtn" class="btn-primary" type="button">💾 Save Posting Rules</button>
@@ -3369,6 +3394,8 @@ def _render_page() -> str:
     document.getElementById('prRestDuration').value = String(p.rest_duration_minutes || '');
     document.getElementById('prDryRun').value = String(p.dry_run !== false);
     document.getElementById('prAutoSkip').value = String(!!p.auto_skip);
+    document.getElementById('prPauseOnCaptcha').value = String(!!p.pause_on_captcha);
+    document.getElementById('prStopOnRateLimit').value = String(!!p.stop_on_rate_limit);
     document.getElementById('postingRulesModal').classList.add('show');
   }
 
@@ -4244,6 +4271,8 @@ def _render_page() -> str:
       rest_duration_minutes: parseInt((document.getElementById('prRestDuration').value || '').trim(), 10),
       dry_run: document.getElementById('prDryRun').value === 'true',
       auto_skip: document.getElementById('prAutoSkip').value === 'true',
+      pause_on_captcha: document.getElementById('prPauseOnCaptcha').value === 'true',
+      stop_on_rate_limit: document.getElementById('prStopOnRateLimit').value === 'true',
     };
     if (!payload.template_file) {
       toast('Template file is required.', true);

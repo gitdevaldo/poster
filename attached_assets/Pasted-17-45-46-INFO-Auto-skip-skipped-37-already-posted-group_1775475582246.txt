@@ -1,0 +1,38 @@
+17:45:46	INFO	Auto-skip: skipped 37 already-posted groups. — Skipped: 37
+17:45:46	INFO	Reusing existing session without pre-validation.
+17:45:46	INFO	Run started. — Template: post_4.yaml — eligible_groups: 49 — dry_run: False
+17:45:46	DEBUG	Removed stale browser lock: parent.lock
+17:46:06	INFO	Processing group 1/49: Discover — Group: Discover — progress: 1 — total: 49
+17:46:06	INFO	Posting step: open group page. — Group: Discover
+17:46:37	INFO	Failed to open post composer — Group: Discover — Reason: Could not open group composer
+17:46:40	INFO	Posting step: open group page. — Group: Discover
+17:47:10	INFO	Failed to open post composer — Group: Discover — Reason: Could not open group composer
+17:47:10	WARNING	Post skipped/failed. — Group: Discover — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+17:48:10	INFO	Processing group 2/49: Email Blasting — Group: Email Blasting — progress: 2 — total: 49
+17:48:10	INFO	Posting step: open group page. — Group: Email Blasting
+17:48:39	INFO	Failed to open post composer — Group: Email Blasting — Reason: Could not open group composer
+17:48:43	INFO	Posting step: open group page. — Group: Email Blasting
+17:49:11	INFO	Failed to open post composer — Group: Email Blasting — Reason: Could not open group composer
+17:49:11	WARNING	Post skipped/failed. — Group: Email Blasting — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+17:50:12	INFO	Processing group 3/49: Free SMTP Servers for Sending Emails — Group: Free SMTP Servers for Sending Emails — progress: 3 — total: 49
+17:50:12	INFO	Posting step: open group page. — Group: Free SMTP Servers for Sending Emails
+17:50:39	INFO	Failed to open post composer — Group: Free SMTP Servers for Sending Emails — Reason: Could not open group composer
+17:50:42	INFO	Posting step: open group page. — Group: Free SMTP Servers for Sending Emails
+17:51:11	INFO	Failed to open post composer — Group: Free SMTP Servers for Sending Emails — Reason: Could not open group composer
+17:51:11	WARNING	Post skipped/failed. — Group: Free SMTP Servers for Sending Emails — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+17:52:11	INFO	Processing group 4/49: Jual Beli Blog dan Adsense — Group: Jual Beli Blog dan Adsense — progress: 4 — total: 49
+17:52:11	INFO	Posting step: open group page. — Group: Jual Beli Blog dan Adsense
+17:52:43	INFO	Failed to open post composer — Group: Jual Beli Blog dan Adsense — Reason: Could not open group composer
+17:52:46	INFO	Posting step: open group page. — Group: Jual Beli Blog dan Adsense
+17:53:14	INFO	Failed to open post composer — Group: Jual Beli Blog dan Adsense — Reason: Could not open group composer
+17:53:14	WARNING	Post skipped/failed. — Group: Jual Beli Blog dan Adsense — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+17:54:15	INFO	Processing group 5/49: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨 — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨 — progress: 5 — total: 49
+17:54:15	INFO	Posting step: open group page. — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨
+17:54:26	INFO	Failed to open post composer — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨 — Reason: Could not open group composer
+17:54:29	INFO	Posting step: open group page. — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨
+17:54:38	INFO	Failed to open post composer — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨 — Reason: Could not open group composer
+17:54:38	WARNING	Post skipped/failed. — Group: JUAL BELI VPS/RDP & AKUN CLOUD 🇲🇨 — Template: post_4.yaml — detail: Could not open group composer — dry_run: False
+17:55:38	INFO	Processing group 6/49: Komunitas Programmer Indonesia — Group: Komunitas Programmer Indonesia — progress: 6 — total: 49
+17:55:38	INFO	Posting step: open group page. — Group: Komunitas Programmer Indonesia
+17:55:45	WARNING	Post skipped/failed. — Group: Komunitas Programmer Indonesia — Template: post_4.yaml — detail: CAPTCHA_DETECTED — dry_run: False
+17:56:46	INFO	Scheduler cycle completed. — Template: post_4.yaml — posted_count: 0 — dry_run: False
