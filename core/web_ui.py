@@ -2246,18 +2246,20 @@ def _render_page() -> str:
     /* ── Tabs ───────────────────────────── */
     .tabs-bar {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       gap: 6px;
       padding: 0 16px 0;
-      margin: 8px auto 0;
+      margin: 8px auto -2px;
       max-width: 1340px;
       width: 100%;
+      position: relative;
+      z-index: 2;
     }
     .tab-btn {
       font-family: var(--heading);
       font-weight: 800;
       font-size: 13px;
-      padding: 9px 18px;
+      padding: 9px 18px 0;
       border-radius: var(--r-md) var(--r-md) 0 0;
       border: 2px solid var(--fg);
       border-bottom: none;
@@ -2267,11 +2269,11 @@ def _render_page() -> str:
       transition: background .15s, color .15s;
     }
     .tab-btn.active {
-      background: var(--card);
-      color: var(--fg);
+      background: var(--fg);
+      color: var(--card);
     }
     .tab-btn:hover:not(.active) {
-      background: var(--card);
+      background: var(--border);
       color: var(--fg);
     }
     .tab-panel {
