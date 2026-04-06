@@ -259,14 +259,20 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
         comment_input.click(timeout=4000)
         page.wait_for_timeout(random.randint(400, 800))
 
-        # Insert full text in one shot; handle newlines with Shift+Enter
-        segments = text.split("\n")
-        for i, seg in enumerate(segments):
-            if seg:
-                page.keyboard.insert_text(seg)
-            if i < len(segments) - 1:
-                page.keyboard.press("Shift+Enter")
-
+        # Copy the entire template to the browser clipboard via execCommand,
+        # then paste it all at once with Ctrl+V — newlines included.
+        page.evaluate(
+            """(t) => {
+                const el = document.createElement('textarea');
+                el.value = t;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+            }""",
+            text,
+        )
+        page.keyboard.press("Control+v")
         page.wait_for_timeout(random.randint(400, 700))
 
         # Attach images via set_input_files (no OS dialog, same as autopost)
