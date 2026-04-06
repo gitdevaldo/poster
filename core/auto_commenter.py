@@ -168,9 +168,75 @@ def _scroll_to_reveal_comments(page: Any) -> None:
         pass
 
 
-def _do_comment(page: Any, text: str) -> bool:
+def _collect_template_images(template: dict[str, Any]) -> list[str]:
+    """Return resolved image paths from a template dict (mirrors scheduler logic)."""
+    images: list[str] = []
+    single = template.get("image")
+    if isinstance(single, str) and single.strip():
+        images.append(single.strip())
+    image_list = template.get("images")
+    if isinstance(image_list, list):
+        for item in image_list:
+            if isinstance(item, str) and item.strip():
+                images.append(item.strip())
+    seen: set[str] = set()
+    unique: list[str] = []
+    for img in images:
+        if img not in seen:
+            seen.add(img)
+            unique.append(img)
+    return unique
+
+
+def _attach_comment_image(page: Any, image_paths: list[str]) -> bool:
+    """Attach images to a Facebook comment via the photo button in the comment toolbar."""
+    if not image_paths:
+        return True
+
+    resolved: list[str] = []
+    for p in image_paths:
+        path = Path(p)
+        if not path.exists():
+            log_event(f"Comment image not found: {p}", level="WARNING")
+            return False
+        resolved.append(str(path.resolve()))
+
+    photo_btn_selectors = [
+        "div[aria-label='Photo/video'][role='button']",
+        "div[aria-label='Foto/video'][role='button']",
+        "div[aria-label*='Photo'][role='button']",
+        "div[aria-label*='Foto'][role='button']",
+        "div[aria-label*='photo' i][role='button']",
+        "div[aria-label*='image' i][role='button']",
+    ]
+
+    try:
+        # Try to find and click the photo button in the comment toolbar
+        for sel in photo_btn_selectors:
+            try:
+                btn = page.locator(sel)
+                if btn.count() > 0 and btn.first.is_visible(timeout=500):
+                    btn.first.click(timeout=3000)
+                    page.wait_for_timeout(1200)
+                    break
+            except Exception:
+                continue
+
+        # Set the file on the file input
+        file_input = page.locator("input[type='file']")
+        if file_input.count() > 0:
+            file_input.first.set_input_files(resolved, timeout=8000)
+            page.wait_for_timeout(2500)
+            return True
+    except Exception as exc:
+        log_exception("Failed to attach comment image.", exc)
+    return False
+
+
+def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> bool:
     """Find the comment input for the top post and submit a comment.
 
+    Uses insert_text for fast paste-like input (no per-character delay).
     Returns True if comment was successfully submitted.
     """
     _scroll_to_reveal_comments(page)
@@ -183,18 +249,25 @@ def _do_comment(page: Any, text: str) -> bool:
 
     try:
         comment_input.click(timeout=4000)
-        page.wait_for_timeout(random.randint(400, 900))
+        page.wait_for_timeout(random.randint(400, 800))
 
-        for char in text:
-            if char == "\n":
-                # Shift+Enter inserts a line break inside the comment box;
-                # bare Enter would submit the comment prematurely.
+        # Paste text segment-by-segment — insert_text bypasses key events so
+        # \n won't trigger a submit; Shift+Enter inserts a visible line break.
+        segments = text.split("\n")
+        for i, segment in enumerate(segments):
+            if segment:
+                page.keyboard.insert_text(segment)
+            if i < len(segments) - 1:
                 page.keyboard.press("Shift+Enter")
-                page.wait_for_timeout(random.randint(60, 150))
-            else:
-                page.keyboard.type(char, delay=random.randint(25, 90))
+                page.wait_for_timeout(random.randint(40, 100))
 
-        page.wait_for_timeout(random.randint(500, 1000))
+        page.wait_for_timeout(random.randint(300, 600))
+
+        # Attach images if present
+        if image_paths:
+            _attach_comment_image(page, image_paths)
+
+        page.wait_for_timeout(random.randint(400, 800))
         page.keyboard.press("Enter")
         page.wait_for_timeout(random.randint(1500, 3000))
         return True
@@ -301,17 +374,22 @@ def run_auto_commenter(
             if str(t.get("template_file", "")).strip() == selected_template_file:
                 template = t
                 break
-    elif all_templates:
+        if template is None:
+            log_event(
+                f"Configured comment template '{selected_template_file}' not found — falling back to first available.",
+                level="WARNING",
+            )
+    if template is None and all_templates:
         template = all_templates[0]
 
     if template is None:
-        log_event(
-            f"Comment template '{selected_template_file or '(auto)'}' not found.",
-            level="ERROR",
-        )
+        log_event("No comment templates found in templates/ folder.", level="ERROR")
         return
 
+    actual_template_file = str(template.get("template_file", "(unknown)"))
     comment_text = str(template.get("text", "")).strip()
+    comment_images = _collect_template_images(template)
+
     if not comment_text:
         log_event("Comment template has no text content.", level="ERROR")
         return
@@ -323,8 +401,9 @@ def run_auto_commenter(
     log_event(
         "Auto commenter started.",
         context={
+            "Template": actual_template_file,
             "groups": len(comment_groups),
-            "template": selected_template_file or "(first available)",
+            "images": len(comment_images),
             "delay_min_min": min_delay,
             "delay_max_min": max_delay,
         },
@@ -392,31 +471,35 @@ def run_auto_commenter(
                                     "Auto comment: no post ID found on group page, skipping.",
                                     context={"group": group_name},
                                 )
-                            elif comment_log.get(group_id) == post_id:
+                                continue
+
+                            if comment_log.get(group_id) == post_id:
                                 log_event(
                                     "Auto comment: already commented on latest post, skipping.",
                                     context={"group": group_name, "post_id": post_id},
                                 )
-                            else:
+                                continue
+
+                            log_event(
+                                "Auto comment: commenting on new post.",
+                                context={"group": group_name, "post_id": post_id},
+                            )
+                            success = _do_comment(page, comment_text, comment_images or None)
+                            if success:
+                                comment_log[group_id] = post_id
+                                _save_comment_log(comment_log_path, comment_log)
                                 log_event(
-                                    "Auto comment: commenting on new post.",
+                                    "Auto comment: comment posted successfully.",
                                     context={"group": group_name, "post_id": post_id},
                                 )
-                                success = _do_comment(page, comment_text)
-                                if success:
-                                    comment_log[group_id] = post_id
-                                    _save_comment_log(comment_log_path, comment_log)
-                                    log_event(
-                                        "Auto comment: comment posted successfully.",
-                                        context={"group": group_name, "post_id": post_id},
-                                    )
-                                else:
-                                    log_event(
-                                        "Auto comment: failed to post comment.",
-                                        level="WARNING",
-                                        context={"group": group_name},
-                                    )
+                            else:
+                                log_event(
+                                    "Auto comment: failed to post comment.",
+                                    level="WARNING",
+                                    context={"group": group_name},
+                                )
 
+                            # Delay only after attempting a comment (not when skipping)
                             if not _control_checkpoint(pause_event, stop_event):
                                 break
 
