@@ -9,6 +9,7 @@ comment_log.json tracks {group_id: last_commented_post_id} to avoid duplicates.
 """
 from __future__ import annotations
 
+import base64
 import json
 import random
 import re
@@ -188,53 +189,98 @@ def _collect_template_images(template: dict[str, Any]) -> list[str]:
     return unique
 
 
-def _attach_comment_image(page: Any, image_paths: list[str]) -> bool:
-    """Attach images to a Facebook comment using expect_file_chooser so the
-    OS file dialog never appears — Playwright intercepts and sets files directly."""
+_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+# JavaScript: write a base64-encoded image blob to the browser clipboard
+_JS_WRITE_IMG_CLIPBOARD = """
+async ([b64, mime]) => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: mime });
+    const item  = new ClipboardItem({ [mime]: blob });
+    await navigator.clipboard.write([item]);
+}
+"""
+
+# JavaScript: dispatch a synthetic paste event carrying the image as a File.
+# Fallback when navigator.clipboard.write is blocked.
+_JS_DISPATCH_PASTE_IMG = """
+([b64, mime, filename]) => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: mime });
+    const file  = new File([blob], filename, { type: mime });
+    const dt    = new DataTransfer();
+    dt.items.add(file);
+    const el = document.activeElement;
+    if (!el) return false;
+    el.dispatchEvent(new ClipboardEvent('paste', {
+        clipboardData: dt, bubbles: true, cancelable: true
+    }));
+    return true;
+}
+"""
+
+
+def _paste_images_via_clipboard(page: Any, image_paths: list[str]) -> bool:
+    """Paste each image into the focused comment box via the browser clipboard.
+
+    No photo button is clicked and no OS file dialog ever appears.
+    Primary:  navigator.clipboard.write() + Ctrl+V
+    Fallback: synthetic ClipboardEvent paste dispatch
+    """
     if not image_paths:
         return True
 
-    resolved: list[str] = []
-    for p in image_paths:
-        path = Path(p)
+    for img_path in image_paths:
+        path = Path(img_path)
         if not path.exists():
-            log_event(f"Comment image not found: {p}", level="WARNING")
+            log_event(f"Comment image not found: {img_path}", level="WARNING")
             return False
-        resolved.append(str(path.resolve()))
 
-    photo_btn_selectors = [
-        "div[aria-label='Photo/video'][role='button']",
-        "div[aria-label='Foto/video'][role='button']",
-        "div[aria-label*='Photo'][role='button']",
-        "div[aria-label*='Foto'][role='button']",
-        "div[aria-label*='photo' i][role='button']",
-        "div[aria-label*='image' i][role='button']",
-    ]
+        raw   = path.read_bytes()
+        b64   = base64.b64encode(raw).decode()
+        mime  = _MIME_MAP.get(path.suffix.lower(), "image/jpeg")
 
-    try:
-        for sel in photo_btn_selectors:
+        pasted = False
+
+        # ── primary: write to browser clipboard then Ctrl+V ─────────────
+        try:
+            page.evaluate(_JS_WRITE_IMG_CLIPBOARD, [b64, mime])
+            page.keyboard.press("Control+v")
+            page.wait_for_timeout(random.randint(1800, 2500))
+            pasted = True
+        except Exception:
+            pass
+
+        # ── fallback: dispatch synthetic paste event ─────────────────────
+        if not pasted:
             try:
-                btn = page.locator(sel)
-                if btn.count() > 0 and btn.first.is_visible(timeout=500):
-                    # Intercept the file chooser so the OS dialog never opens
-                    with page.expect_file_chooser(timeout=5000) as fc_info:
-                        btn.first.click(timeout=3000)
-                    fc_info.value.set_files(resolved)
-                    page.wait_for_timeout(2500)
-                    return True
-            except Exception:
-                continue
-    except Exception as exc:
-        log_exception("Failed to attach comment image.", exc)
-    return False
+                ok = page.evaluate(_JS_DISPATCH_PASTE_IMG, [b64, mime, path.name])
+                page.wait_for_timeout(random.randint(1800, 2500))
+                pasted = bool(ok)
+            except Exception as exc:
+                log_exception("Failed to paste image into comment.", exc)
+
+        if not pasted:
+            log_event(f"Could not paste image: {path.name}", level="WARNING")
+            return False
+
+    return True
 
 
 def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> bool:
     """Find the comment input for the top post and submit a comment.
 
-    Copies the full text to the browser clipboard in one shot then Ctrl+V
-    pastes it — preserving newlines without any line-by-line loop.
-    Returns True if comment was successfully submitted.
+    1. Click the comment box.
+    2. Copy full template text to clipboard via JS → Ctrl+V (one-shot paste).
+    3. If images: paste each image via browser clipboard → Ctrl+V, then
+       re-focus the comment box so Enter still submits.
+    4. Press Enter.
     """
     _scroll_to_reveal_comments(page)
     page.wait_for_timeout(600)
@@ -248,8 +294,7 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
         comment_input.click(timeout=4000)
         page.wait_for_timeout(random.randint(400, 800))
 
-        # Write the entire template text to the clipboard via JS (one shot),
-        # then paste with Ctrl+V — no line-by-line loop, no char typing.
+        # ── paste text (one-shot via execCommand copy → Ctrl+V) ──────────
         page.evaluate(
             """(t) => {
                 const el = document.createElement('textarea');
@@ -264,16 +309,15 @@ def _do_comment(page: Any, text: str, image_paths: list[str] | None = None) -> b
         page.keyboard.press("Control+v")
         page.wait_for_timeout(random.randint(500, 800))
 
-        # Attach images if present (no OS dialog).
-        # After the file is set Facebook renders a preview and the comment box
-        # loses focus — re-click it and wait before pressing Enter.
+        # ── paste images via clipboard (no button, no OS dialog) ─────────
         if image_paths:
-            _attach_comment_image(page, image_paths)
-            page.wait_for_timeout(random.randint(2000, 3000))  # wait for preview
-            comment_input.click(timeout=4000)  # re-focus the box
-            page.wait_for_timeout(random.randint(400, 700))
+            _paste_images_via_clipboard(page, image_paths)
+            # Facebook renders an image preview; wait then re-focus the box
+            page.wait_for_timeout(random.randint(1500, 2500))
+            comment_input.click(timeout=4000)
+            page.wait_for_timeout(random.randint(300, 600))
 
-        page.wait_for_timeout(random.randint(300, 600))
+        page.wait_for_timeout(random.randint(300, 500))
         page.keyboard.press("Enter")
         page.wait_for_timeout(random.randint(1500, 3000))
         return True
