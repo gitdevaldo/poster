@@ -2249,7 +2249,7 @@ def _render_page() -> str:
       align-items: flex-end;
       gap: 6px;
       padding: 0 16px 0;
-      margin: 8px auto -2px;
+      margin: 8px auto -18px;
       max-width: 1340px;
       width: 100%;
       position: relative;
@@ -2259,7 +2259,7 @@ def _render_page() -> str:
       font-family: var(--heading);
       font-weight: 800;
       font-size: 13px;
-      padding: 9px 18px 0;
+      padding: 9px 18px;
       border-radius: var(--r-md) var(--r-md) 0 0;
       border: 2px solid var(--fg);
       border-bottom: none;
