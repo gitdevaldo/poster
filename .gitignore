@@ -1,12 +1,8 @@
 __pycache__/
 *.pyc
 logs/*.log
-data/session.json
-data/posted_log.json
 
 *.zip
 
 .github/workflows/ci.yml
-data/accounts/*/camoufox_profile/
 **/camoufox_profile/
-data/accounts/*/camoufox_profile/**
