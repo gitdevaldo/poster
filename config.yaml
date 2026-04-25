@@ -17,17 +17,17 @@ groups:
     scroll_wait_ms: 1400
     min_scroll_rounds_before_stop: 8
 posting:
-  template_file: post_1.yaml
+  template_file: post_2.yaml
   min_delay_minutes: 1
-  max_delay_minutes: 3
+  max_delay_minutes: 2
   max_posts_per_session: 1000
   cooldown_hours: 24
-  rest_every_n_posts: 10
+  rest_every_n_posts: 50
   rest_duration_minutes: 10
   auto_skip: true
-  dry_run: true
+  dry_run: false
 browser:
-  headless: false
+  headless: true
   locale: id-ID
   timezone: Asia/Jakarta
   humanize: false
@@ -77,5 +77,5 @@ accounts:
       posted_log: data/accounts/acc-1/logs/posted_log.json
       screenshots: data/accounts/acc-1/logs/screenshots
     posting:
-      template_file: post_1.yaml
+      template_file: post_2.yaml
     schedules: []

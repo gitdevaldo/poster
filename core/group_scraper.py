@@ -22,6 +22,17 @@ from core.session_manager import (
 GROUP_LINK_RE = re.compile(r"facebook\.com/groups/([^/?#]+)", re.IGNORECASE)
 LAST_ACTIVE_SUFFIX_RE = re.compile(r"\s*Last active\s+.*$", re.IGNORECASE)
 
+# Facebook navigation pages under /groups/ that are NOT actual groups.
+_NON_GROUP_SLUGS: frozenset[str] = frozenset({
+    "feed", "discover", "joins", "create", "settings",
+    "your_groups", "suggested", "browse", "notifications",
+})
+
+
+def _is_valid_group_id(group_id: str) -> bool:
+    """Return False for known Facebook navigation slugs."""
+    return bool(group_id) and group_id.lower() not in _NON_GROUP_SLUGS
+
 
 def _load_config(config_path: Path) -> dict:
     return load_config(config_path)
@@ -68,9 +79,11 @@ def _canonical_group_id(group_id: str, url: str) -> str:
     match = GROUP_LINK_RE.search(str(url or ""))
     if match:
         url_id = match.group(1).strip()
-        if url_id:
+        if url_id and _is_valid_group_id(url_id):
             return url_id
-    return parsed_id
+    if _is_valid_group_id(parsed_id):
+        return parsed_id
+    return ""
 
 
 def _upsert_group(groups: dict[str, dict[str, str]], group_id: str, name: str, url: str) -> None:
@@ -203,6 +216,8 @@ def _extract_groups_from_page(
                 if not match:
                     continue
                 group_id = match.group(1)
+                if not _is_valid_group_id(group_id):
+                    continue
                 candidate_name = text or aria_label or title or f"Group {group_id}"
                 _upsert_group(groups, group_id, candidate_name, href)
 
