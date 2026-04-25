@@ -2002,7 +2002,7 @@ def _render_page() -> str:
     /* ── Form row ───────────────────────── */
     .frow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
 
-    input[type=text], select, textarea {
+    input[type=text], input[type=datetime-local], input[type=time], select, textarea {
       height: 40px; padding: 0 13px;
       border: 2px solid var(--fg); border-radius: var(--r-md);
       background: var(--card); color: var(--fg);
@@ -2011,7 +2011,7 @@ def _render_page() -> str:
       box-shadow: 4px 4px 0 transparent;
       transition: box-shadow .18s var(--bounce), border-color .15s;
     }
-    input[type=text]:focus, select:focus, textarea:focus {
+    input[type=text]:focus, input[type=datetime-local]:focus, input[type=time]:focus, select:focus, textarea:focus {
       border-color: var(--accent);
       box-shadow: 4px 4px 0 var(--accent);
     }
