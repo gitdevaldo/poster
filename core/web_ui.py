@@ -2050,6 +2050,8 @@ def _render_page() -> str:
     .btn-yellow  { background: var(--yellow); }
     .btn-red     { background: var(--red); color: #fff; }
     .btn-red:hover:not(:disabled) { background: #ef4444; }
+    .btn-violet  { background: #7c3aed; color: #fff; }
+    .btn-violet:hover:not(:disabled) { background: #6d28d9; }
 
     .sm-btn {
       padding: 5px 11px; font-size: 12px; border-radius: var(--r-pill);
@@ -2454,11 +2456,12 @@ def _render_page() -> str:
         </table>
       </div>
       <div class="settings-box" style="padding:8px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+        <div class="mini-lbl">Global Settings</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
           <button id="openBrowserRulesBtn" class="btn-primary" type="button" style="width:100%">🌐 Browser</button>
           <button id="openGroupsRulesBtn" class="btn-yellow" type="button" style="width:100%">👥 Groups</button>
           <button id="openPostingRulesBtn" class="btn-green" type="button" style="width:100%">📝 Posting</button>
-          <button id="openCommentRulesBtn" type="button" style="width:100%;background:#7c3aed;color:#fff;border:2px solid var(--fg);border-radius:8px;padding:6px 8px;font-family:var(--heading);font-weight:700;font-size:13px;cursor:pointer">💬 Comment</button>
+          <button id="openCommentRulesBtn" class="btn-violet" type="button" style="width:100%">💬 Comment</button>
         </div>
       </div>
     </div>
@@ -2524,16 +2527,22 @@ def _render_page() -> str:
         </div>
 
         <div class="settings-box" style="margin-top:10px;padding:8px">
-          <div class="frow" style="gap:5px;flex-wrap:nowrap">
-            <select id="schType" style="flex:0 0 auto;min-width:100px">
-              <option value="specific_datetime">One Time</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
+          <div class="mini-lbl">Scheduler</div>
+          <div class="frow" style="gap:5px;flex-wrap:nowrap;margin-top:6px;align-items:flex-end">
+            <div style="flex:0 0 auto">
+              <div class="mini-lbl" style="margin-bottom:2px">Type</div>
+              <select id="schType">
+                <option value="specific_datetime">One Time</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
             <div id="schDateTimeWrap" style="flex:1;min-width:0">
+              <div class="mini-lbl" style="margin-bottom:2px">Date &amp; Time (WIB)</div>
               <input id="schDateTime" type="datetime-local" style="width:100%">
             </div>
             <div id="schTimeOnlyWrap" style="flex:1;min-width:0;display:none">
+              <div class="mini-lbl" style="margin-bottom:2px">Time (WIB)</div>
               <input id="schTimeOnly" type="time" value="09:00" style="width:100%">
             </div>
             <button id="startScheduleBtn" class="btn-primary" type="button" style="flex:0 0 auto;white-space:nowrap">⏰ Add</button>
@@ -2616,19 +2625,26 @@ def _render_page() -> str:
       </div>
 
       <div class="settings-box" style="margin-top:10px;padding:8px">
-        <div class="frow" style="gap:5px;flex-wrap:nowrap">
-          <select id="cmSchType" style="flex:0 0 auto;min-width:100px">
-            <option value="specific_datetime">One Time</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-          </select>
+        <div class="mini-lbl">Scheduler</div>
+        <div class="frow" style="gap:5px;flex-wrap:nowrap;margin-top:6px;align-items:flex-end">
+          <div style="flex:0 0 auto">
+            <div class="mini-lbl" style="margin-bottom:2px">Type</div>
+            <select id="cmSchType">
+              <option value="specific_datetime">One Time</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
           <div id="cmSchDateFromWrap" style="flex:1;min-width:0">
+            <div class="mini-lbl" style="margin-bottom:2px">From (date &amp; time, WIB)</div>
             <input id="cmSchDateFrom" type="datetime-local" style="width:100%">
           </div>
           <div id="cmSchTimeFromWrap" style="flex:1;min-width:0;display:none">
+            <div class="mini-lbl" style="margin-bottom:2px">From (WIB)</div>
             <input id="cmSchTimeFrom" type="time" value="09:00" style="width:100%">
           </div>
           <div style="flex:0 0 auto;min-width:80px">
+            <div class="mini-lbl" style="margin-bottom:2px">To (WIB)</div>
             <input id="cmSchTimeTo" type="time" value="22:00" style="width:100%">
           </div>
           <button id="cmStartScheduleBtn" class="btn-primary" type="button" style="flex:0 0 auto;white-space:nowrap">⏰ Add</button>
