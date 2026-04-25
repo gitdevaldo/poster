@@ -3545,7 +3545,7 @@ def _render_page() -> str:
         : `<span class="pill p-orange">● Off</span>`;
       const btns = [
         `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')" title="Set template" aria-label="Set template">🧩</button>`,
-        `<button class="sm-btn" type="button" onclick="callAction('setup_session','${esc(a.id)}')" title="Login / Setup session" aria-label="Login">🔐 Login</button>`,
+        `<button class="sm-btn" type="button" onclick="callAction('setup_session','${esc(a.id)}')" title="Login / Setup session" aria-label="Login">🔐</button>`,
         `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')" title="Set as active account" aria-label="Set as active account">⚡</button>`,
         a.enabled
           ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')" title="Disable account" aria-label="Disable account">⏸</button>`
