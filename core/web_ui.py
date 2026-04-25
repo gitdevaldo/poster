@@ -2453,13 +2453,12 @@ def _render_page() -> str:
           </tbody>
         </table>
       </div>
-      <div class="settings-box">
-        <div class="mini-lbl">Global Settings</div>
-        <div class="frow" style="margin:0;justify-content:center;flex-wrap:wrap;gap:6px">
-          <button id="openBrowserRulesBtn" class="btn-primary" type="button">🌐 Browser Rules</button>
-          <button id="openGroupsRulesBtn" class="btn-yellow" type="button">👥 Groups Rules</button>
-          <button id="openPostingRulesBtn" class="btn-green" type="button">📝 Posting Rules</button>
-          <button id="openCommentRulesBtn" type="button" style="background:#7c3aed;color:#fff;border:2px solid var(--fg);border-radius:8px;padding:6px 12px;font-family:var(--heading);font-weight:700;font-size:13px;cursor:pointer">💬 Comment Rules</button>
+      <div class="settings-box" style="padding:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <button id="openBrowserRulesBtn" class="btn-primary" type="button" style="width:100%">🌐 Browser</button>
+          <button id="openGroupsRulesBtn" class="btn-yellow" type="button" style="width:100%">👥 Groups</button>
+          <button id="openPostingRulesBtn" class="btn-green" type="button" style="width:100%">📝 Posting</button>
+          <button id="openCommentRulesBtn" type="button" style="width:100%;background:#7c3aed;color:#fff;border:2px solid var(--fg);border-radius:8px;padding:6px 8px;font-family:var(--heading);font-weight:700;font-size:13px;cursor:pointer">💬 Comment</button>
         </div>
       </div>
     </div>
@@ -2524,27 +2523,23 @@ def _render_page() -> str:
           </div>
         </div>
 
-        <div class="settings-box" style="margin-top:10px">
-          <div class="mini-lbl">Scheduler</div>
-          <div class="frow">
-            <div class="field" style="min-width:150px;flex:1">
-              <label class="mini-lbl" for="schType">Type</label>
-              <select id="schType">
-                <option value="specific_datetime">One Time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-              </select>
+        <div class="settings-box" style="margin-top:10px;padding:8px">
+          <div class="frow" style="gap:5px;flex-wrap:nowrap">
+            <select id="schType" style="flex:0 0 auto;min-width:100px">
+              <option value="specific_datetime">One Time</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+            <div id="schDateTimeWrap" style="flex:1;min-width:0">
+              <input id="schDateTime" type="datetime-local" style="width:100%">
             </div>
-            <div class="field" style="min-width:200px;flex:2" id="schDateTimeWrap">
-              <label class="mini-lbl" for="schDateTime">Date &amp; Time (WIB)</label>
-              <input id="schDateTime" type="datetime-local">
+            <div id="schTimeOnlyWrap" style="flex:1;min-width:0;display:none">
+              <input id="schTimeOnly" type="time" value="09:00" style="width:100%">
             </div>
-            <div class="field" style="min-width:130px;flex:1;display:none" id="schTimeOnlyWrap">
-              <label class="mini-lbl" for="schTimeOnly">Time (WIB)</label>
-              <input id="schTimeOnly" type="time" value="09:00">
-            </div>
+            <button id="startScheduleBtn" class="btn-primary" type="button" style="flex:0 0 auto;white-space:nowrap">⏰ Add</button>
+            <button id="stopScheduleBtn" class="btn-red" type="button" style="flex:0 0 auto;white-space:nowrap">■ Off</button>
           </div>
-          <div class="frow" id="schWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px">
+          <div class="frow" id="schWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px;margin-top:6px">
             <label><input type="checkbox" class="schDay" value="0"> Mon</label>
             <label><input type="checkbox" class="schDay" value="1"> Tue</label>
             <label><input type="checkbox" class="schDay" value="2"> Wed</label>
@@ -2552,10 +2547,6 @@ def _render_page() -> str:
             <label><input type="checkbox" class="schDay" value="4"> Fri</label>
             <label><input type="checkbox" class="schDay" value="5"> Sat</label>
             <label><input type="checkbox" class="schDay" value="6"> Sun</label>
-          </div>
-          <div class="frow">
-            <button id="startScheduleBtn" class="btn-primary" type="button">⏰ Add Schedule</button>
-            <button id="stopScheduleBtn" class="btn-red" type="button">■ Disable All</button>
           </div>
           <div id="scheduleInfo" class="mono" style="margin-top:6px">No schedule active.</div>
           <div id="scheduleRecords" class="schedule-records">
@@ -2624,31 +2615,26 @@ def _render_page() -> str:
         <div id="cmStatusInfo" class="mono" style="margin-top:4px">Idle — no commenter running.</div>
       </div>
 
-      <div class="settings-box" style="margin-top:10px">
-        <div class="mini-lbl">Scheduler</div>
-        <div class="frow">
-          <div class="field" style="min-width:150px;flex:1">
-            <label class="mini-lbl" for="cmSchType">Type</label>
-            <select id="cmSchType">
-              <option value="specific_datetime">One Time</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
+      <div class="settings-box" style="margin-top:10px;padding:8px">
+        <div class="frow" style="gap:5px;flex-wrap:nowrap">
+          <select id="cmSchType" style="flex:0 0 auto;min-width:100px">
+            <option value="specific_datetime">One Time</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+          <div id="cmSchDateFromWrap" style="flex:1;min-width:0">
+            <input id="cmSchDateFrom" type="datetime-local" style="width:100%">
           </div>
-          <div class="field" style="min-width:180px;flex:2" id="cmSchDateFromWrap">
-            <label class="mini-lbl" for="cmSchDateFrom">From (date &amp; time, WIB)</label>
-            <input id="cmSchDateFrom" type="datetime-local">
+          <div id="cmSchTimeFromWrap" style="flex:1;min-width:0;display:none">
+            <input id="cmSchTimeFrom" type="time" value="09:00" style="width:100%">
           </div>
-          <div class="field" style="min-width:120px;flex:1;display:none" id="cmSchTimeFromWrap">
-            <label class="mini-lbl" for="cmSchTimeFrom">From (WIB)</label>
-            <input id="cmSchTimeFrom" type="time" value="09:00">
+          <div style="flex:0 0 auto;min-width:80px">
+            <input id="cmSchTimeTo" type="time" value="22:00" style="width:100%">
           </div>
-          <div class="field" style="min-width:110px;flex:1">
-            <label class="mini-lbl" for="cmSchTimeTo">To (WIB)</label>
-            <input id="cmSchTimeTo" type="time" value="22:00">
-          </div>
+          <button id="cmStartScheduleBtn" class="btn-primary" type="button" style="flex:0 0 auto;white-space:nowrap">⏰ Add</button>
+          <button id="cmStopScheduleBtn" class="btn-red" type="button" style="flex:0 0 auto;white-space:nowrap">■ Off</button>
         </div>
-        <div class="frow" id="cmSchWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px">
+        <div class="frow" id="cmSchWeekdaysWrap" style="display:none;flex-wrap:wrap;gap:6px;margin-top:6px">
           <label><input type="checkbox" class="cmSchDay" value="0"> Mon</label>
           <label><input type="checkbox" class="cmSchDay" value="1"> Tue</label>
           <label><input type="checkbox" class="cmSchDay" value="2"> Wed</label>
@@ -2656,10 +2642,6 @@ def _render_page() -> str:
           <label><input type="checkbox" class="cmSchDay" value="4"> Fri</label>
           <label><input type="checkbox" class="cmSchDay" value="5"> Sat</label>
           <label><input type="checkbox" class="cmSchDay" value="6"> Sun</label>
-        </div>
-        <div class="frow">
-          <button id="cmStartScheduleBtn" class="btn-primary" type="button">⏰ Add Schedule</button>
-          <button id="cmStopScheduleBtn" class="btn-red" type="button">■ Disable All</button>
         </div>
         <div id="cmScheduleInfo" class="mono" style="margin-top:6px">No comment schedule active.</div>
         <div id="cmScheduleRecords" class="schedule-records">
