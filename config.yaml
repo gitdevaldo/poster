@@ -6,7 +6,7 @@ session:
 presets:
   enabled: false
   name: ''
-active_account: account-1
+active_account: acc-1
 groups:
   source: data/groups.json
   blacklist: data/blacklist.txt
@@ -27,7 +27,7 @@ posting:
   auto_skip: true
   dry_run: true
 browser:
-  headless: true
+  headless: false
   locale: id-ID
   timezone: Asia/Jakarta
   humanize: false
@@ -64,18 +64,18 @@ commenting:
   min_delay_minutes: 1
   max_delay_minutes: 1
 accounts:
-  account-1:
+  acc-1:
     enabled: true
     session:
-      path: data/accounts/account-1/session.json
-      persistent_profile_dir: data/accounts/account-1/camoufox_profile
+      path: data/accounts/acc-1/session.json
+      persistent_profile_dir: data/accounts/acc-1/camoufox_profile
     groups:
-      source: data/accounts/account-1/groups.json
-      blacklist: data/accounts/account-1/blacklist.txt
+      source: data/accounts/acc-1/groups.json
+      blacklist: data/accounts/acc-1/blacklist.txt
     paths:
-      queue_state: data/accounts/account-1/queue_state.json
-      posted_log: data/accounts/account-1/logs/posted_log.json
-      screenshots: data/accounts/account-1/logs/screenshots
+      queue_state: data/accounts/acc-1/queue_state.json
+      posted_log: data/accounts/acc-1/logs/posted_log.json
+      screenshots: data/accounts/acc-1/logs/screenshots
     posting:
-      template_file: post_2.yaml
+      template_file: post_1.yaml
     schedules: []

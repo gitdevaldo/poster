@@ -1383,7 +1383,11 @@ def _build_state(
     else:
         account_id = selected_account or active or (next(iter(accounts.keys()), ""))
     groups = list_groups_for_account(config_path, account_id) if account_id else []
-    effective_cfg = load_config(config_path, account_id or None)
+    try:
+        effective_cfg = load_config(config_path, account_id or None)
+    except (PermissionError, ValueError):
+        # Account is disabled or not found — fall back to base config so the UI keeps loading
+        effective_cfg = load_config(config_path, None)
 
     account_items: list[dict[str, Any]] = []
     for aid, override in accounts.items():
@@ -3541,6 +3545,7 @@ def _render_page() -> str:
         : `<span class="pill p-orange">● Off</span>`;
       const btns = [
         `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')" title="Set template" aria-label="Set template">🧩</button>`,
+        `<button class="sm-btn" type="button" onclick="callAction('setup_session','${esc(a.id)}')" title="Login / Setup session" aria-label="Login">🔐 Login</button>`,
         `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')" title="Set as active account" aria-label="Set as active account">⚡</button>`,
         a.enabled
           ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')" title="Disable account" aria-label="Disable account">⏸</button>`
