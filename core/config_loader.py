@@ -81,6 +81,14 @@ def load_config(config_path: Path, account_id: str | None = None) -> dict[str, A
     if account_override.get("enabled", True) is False:
         raise PermissionError(f"Account '{active_account_id}' is disabled")
 
+    merged = _deep_merge(base_config, account_override)
+    for key, value in preset_sections.items():
+        base_part = merged.get(key, {})
+        if not isinstance(base_part, dict):
+            base_part = {}
+        merged[key] = _deep_merge(base_part, value)
+    return merged
+
 
 def load_config_lenient(config_path: Path, account_id: str | None = None) -> dict[str, Any]:
     """Load config without raising PermissionError for disabled accounts.
@@ -105,11 +113,3 @@ def load_config_lenient(config_path: Path, account_id: str | None = None) -> dic
         return base_config
 
     return _deep_merge(base_config, account_override)
-
-    merged = _deep_merge(base_config, account_override)
-    for key, value in preset_sections.items():
-        base_part = merged.get(key, {})
-        if not isinstance(base_part, dict):
-            base_part = {}
-        merged[key] = _deep_merge(base_part, value)
-    return merged
