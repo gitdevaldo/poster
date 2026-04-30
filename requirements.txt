@@ -4,3 +4,4 @@ pyyaml
 rich
 Pillow
 schedule
+tzdata

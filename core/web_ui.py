@@ -29,7 +29,7 @@ from core.account_manager import (
     set_group_comment_included,
 )
 from core.auto_commenter import run_auto_commenter
-from core.config_loader import ACCOUNT_ENV_VAR, load_config
+from core.config_loader import ACCOUNT_ENV_VAR, load_config, load_config_lenient
 from core.group_scraper import scrape_groups
 from core.logger import get_log_file, set_log_source
 from core.post_queue import load_templates
@@ -1386,8 +1386,8 @@ def _build_state(
     try:
         effective_cfg = load_config(config_path, account_id or None)
     except (PermissionError, ValueError):
-        # Account is disabled or not found — fall back to base config so the UI keeps loading
-        effective_cfg = load_config(config_path, None)
+        # Account is disabled or not found — use lenient loader that skips enabled check
+        effective_cfg = load_config_lenient(config_path, account_id or None)
 
     account_items: list[dict[str, Any]] = []
     for aid, override in accounts.items():
@@ -4816,8 +4816,8 @@ def _execute_account_action(
 
     with _account_env(account_id):
         if action == "clear_posted_log":
-            from core.config_loader import load_config
-            cfg = load_config(config_path)
+            from core.config_loader import load_config_lenient as _load_cfg_lenient
+            cfg = _load_cfg_lenient(config_path)
             paths_cfg = cfg.get("paths", {})
             posted_log_path = Path(str(paths_cfg.get("posted_log", "data/posted_log.json")))
             if posted_log_path.exists():

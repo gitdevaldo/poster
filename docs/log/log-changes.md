@@ -4,6 +4,25 @@ Log entries in reverse-chronological order (newest first).
 
 ---
 
+## 2026-04-30 09:30
+
+**Fix disabled accounts crash, session validation, and UI account management**
+
+Three issues fixed:
+
+1. **Disabled accounts crash (Issue #3)**: When all accounts are `enabled: false`, the UI threw `PermissionError` because `load_config()` raises on disabled accounts. Added `load_config_lenient()` to `config_loader.py` that skips the enabled check — used by UI for display purposes. Fixed `_build_state` fallback in `web_ui.py` to use lenient loader.
+
+2. **Session validation not detecting login prompts (Issue #2)**: `is_logged_in()` in `session_manager.py` only checked for `/login` in URL. Enhanced it to detect: password input fields, "Continue" buttons, "Use another profile" links, and `/checkpoint` URLs. Also increased page load wait from 1200-1500ms to 3000ms to allow full page render before checking.
+
+3. **Delete account button (Issue #1)**: Already existed in the UI code — the real blocker was Issue #3 preventing the UI from loading at all when accounts are disabled.
+
+**Files changed:**
+- `core/config_loader.py` — Added `load_config_lenient()` function
+- `core/session_manager.py` — Enhanced `is_logged_in()` with DOM checks, increased wait times
+- `core/web_ui.py` — Import `load_config_lenient`, use it in `_build_state` fallback and `clear_posted_log`
+
+---
+
 ## 2026-03-29 20:15
 
 **Add delete schedule feature and auto-reset posted_log**

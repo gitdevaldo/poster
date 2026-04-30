@@ -349,9 +349,42 @@ def is_logged_in(page: Any) -> bool:
     url = page.url.lower()
     if "/login" in url:
         return False
+    if "/checkpoint" in url:
+        return False
 
-    # Facebook home/feed with authenticated context usually resolves to these paths.
-    return "facebook.com" in url
+    if "facebook.com" not in url:
+        return False
+
+    # Detect "Continue as..." / password re-entry page.
+    # This page appears at facebook.com root but has a "Continue" button and
+    # password input — the user is NOT fully logged in.
+    try:
+        # Check for password input field (login/re-auth prompt)
+        password_input = page.query_selector('input[type="password"]')
+        if password_input and password_input.is_visible():
+            return False
+
+        # Check for the "Continue" button on the account picker page
+        continue_btn = page.query_selector('[role="button"][tabindex="0"]')
+        if continue_btn:
+            text = (continue_btn.inner_text() or "").strip().lower()
+            if text in ("continue", "log in", "log into another account"):
+                return False
+
+        # Check for "Use another profile" link — account picker page
+        use_another = page.query_selector('a[href*="login"], [role="link"]')
+        if use_another:
+            link_text = (use_another.inner_text() or "").strip().lower()
+            if "use another profile" in link_text or "create new account" in link_text:
+                # This is the account picker — not truly logged in
+                # But only if we don't see feed elements
+                feed = page.query_selector('[role="feed"], [aria-label="News Feed"]')
+                if not feed:
+                    return False
+    except Exception:
+        pass
+
+    return True
 
 
 def ensure_logged_in_in_page(page: Any, config: dict[str, Any], session_path: Path) -> None:
@@ -359,7 +392,7 @@ def ensure_logged_in_in_page(page: Any, config: dict[str, Any], session_path: Pa
     auto_relogin = bool(config.get("session", {}).get("auto_relogin", True))
 
     page.goto(home_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(3000)
 
     if is_logged_in(page):
         save_session_from_page(page, session_path)
@@ -448,10 +481,12 @@ def validate_session(config_path: Path) -> bool:
                 page = get_or_create_page(browser)
                 configure_page_window(page, config)
                 page.goto(home_url, wait_until="domcontentloaded")
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(3000)
                 valid = is_logged_in(page)
                 if valid:
                     save_session_from_page(page, session_path)
+                else:
+                    log_event("Session invalid: login/password prompt detected.", level="WARNING")
                 return valid
     except Exception as exc:
         log_exception("Session validation failed.", exc)
