@@ -27,7 +27,7 @@ posting:
   auto_skip: true
   dry_run: false
 browser:
-  headless: false
+  headless: true
   locale: id-ID
   timezone: Asia/Jakarta
   humanize: false

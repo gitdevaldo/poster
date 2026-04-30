@@ -1,0 +1,716 @@
+[
+  {
+    "timestamp": "2026-04-30T11:00:46.436221+00:00",
+    "group_id": "forumadsenseindonesia",
+    "group_name": "Adsense Secret Indonesia",
+    "group_url": "https://www.facebook.com/groups/forumadsenseindonesia/",
+    "template": "post_2.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "GROUP_PAUSED",
+    "screenshot": "data\\accounts\\acc-1\\logs\\screenshots\\20260430_110046_forumadsenseindonesia_GROUP_PAUSED.png"
+  },
+  {
+    "timestamp": "2026-04-30T11:02:19.528620+00:00",
+    "group_id": "agcscript",
+    "group_name": "AGC Script",
+    "group_url": "https://www.facebook.com/groups/agcscript/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:04:26.934518+00:00",
+    "group_id": "AndroidEclipseIndonesia",
+    "group_name": "Android Studio Developers Indonesia",
+    "group_url": "https://www.facebook.com/groups/AndroidEclipseIndonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:06:57.803360+00:00",
+    "group_id": "371187409719053",
+    "group_name": "BELAJAR PROGRAM (coding)",
+    "group_url": "https://www.facebook.com/groups/371187409719053/",
+    "template": "post_2.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "Could not open group composer",
+    "screenshot": "data\\accounts\\acc-1\\logs\\screenshots\\20260430_110657_371187409719053_Could_not_open_group_composer.png"
+  },
+  {
+    "timestamp": "2026-04-30T11:09:19.090158+00:00",
+    "group_id": "953585201390635",
+    "group_name": "Blogger Adsense Indonesia",
+    "group_url": "https://www.facebook.com/groups/953585201390635/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:11:11.151476+00:00",
+    "group_id": "bloggerindonesiaaa",
+    "group_name": "BLOGGER INDONESIA",
+    "group_url": "https://www.facebook.com/groups/bloggerindonesiaaa/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:12:49.272337+00:00",
+    "group_id": "blogidn",
+    "group_name": "Blogger Indonesia",
+    "group_url": "https://www.facebook.com/groups/blogidn/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:14:59.351354+00:00",
+    "group_id": "zeblog",
+    "group_name": "BLOGGER INDONESIA",
+    "group_url": "https://www.facebook.com/groups/zeblog/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:16:54.966953+00:00",
+    "group_id": "grupbloggerindonesia",
+    "group_name": "Blogger Indonesia",
+    "group_url": "https://www.facebook.com/groups/grupbloggerindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:19:12.995004+00:00",
+    "group_id": "384128275059207",
+    "group_name": "BLOGGER INDONESIA & JUAL BELI ADSENSE",
+    "group_url": "https://www.facebook.com/groups/384128275059207/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:21:39.407974+00:00",
+    "group_id": "bloggersia",
+    "group_name": "BLOGGER INDONESIA™",
+    "group_url": "https://www.facebook.com/groups/bloggersia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:23:46.633326+00:00",
+    "group_id": "blogger.com.template",
+    "group_name": "BLOGGER TEMPLATE",
+    "group_url": "https://www.facebook.com/groups/blogger.com.template/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:25:30.679063+00:00",
+    "group_id": "714078056127164",
+    "group_name": "Blogger Wordpress Indonesia",
+    "group_url": "https://www.facebook.com/groups/714078056127164/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:27:50.832121+00:00",
+    "group_id": "bloggerindonesiaforadsense",
+    "group_name": "BLOGGER/WORDPRESS INDONESIA FOR ADSENSE",
+    "group_url": "https://www.facebook.com/groups/bloggerindonesiaforadsense/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:29:55.374035+00:00",
+    "group_id": "2160701604115230",
+    "group_name": "ChatGPT Indonesia - Sharing",
+    "group_url": "https://www.facebook.com/groups/2160701604115230/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:31:43.596981+00:00",
+    "group_id": "diskusi.codeigniter.indonesia",
+    "group_name": "CODEIGNITER Indonesia",
+    "group_url": "https://www.facebook.com/groups/diskusi.codeigniter.indonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:33:24.543663+00:00",
+    "group_id": "1410278785794967",
+    "group_name": "CodeIgniter Indonesia ID",
+    "group_url": "https://www.facebook.com/groups/1410278785794967/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:35:26.455229+00:00",
+    "group_id": "ElementorID",
+    "group_name": "Elementor Indonesia",
+    "group_url": "https://www.facebook.com/groups/ElementorID/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:37:12.235549+00:00",
+    "group_id": "1311613799458752",
+    "group_name": "Email Blasting & SMTP for Businesses, Entrepreneurs, Agencies & Coaches",
+    "group_url": "https://www.facebook.com/groups/1311613799458752/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:39:11.666426+00:00",
+    "group_id": "234781444550539",
+    "group_name": "Email Blasting Pro | Tech Support Call | Email | Data | SMTP",
+    "group_url": "https://www.facebook.com/groups/234781444550539/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:41:37.457272+00:00",
+    "group_id": "1230435843801931",
+    "group_name": "Flutter Indonesia",
+    "group_url": "https://www.facebook.com/groups/1230435843801931/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:43:37.011557+00:00",
+    "group_id": "front.end.developer.indonesia",
+    "group_name": "Front-End Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/front.end.developer.indonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:45:04.007160+00:00",
+    "group_id": "475457737064077",
+    "group_name": "GOOGLE ADSENSE INDONESIA",
+    "group_url": "https://www.facebook.com/groups/475457737064077/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:46:59.514501+00:00",
+    "group_id": "PublisherIndonesia",
+    "group_name": "Google Adsense Indonesia",
+    "group_url": "https://www.facebook.com/groups/PublisherIndonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:49:01.006599+00:00",
+    "group_id": "GoogleAdsIndonesia",
+    "group_name": "GOOGLE ADSENSE INDONESIA",
+    "group_url": "https://www.facebook.com/groups/GoogleAdsIndonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:50:50.137421+00:00",
+    "group_id": "5814064138621495",
+    "group_name": "GRUB HOSTING INDONESIA",
+    "group_url": "https://www.facebook.com/groups/5814064138621495/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:53:11.657402+00:00",
+    "group_id": "227360275300121",
+    "group_name": "Indonesian Darknet",
+    "group_url": "https://www.facebook.com/groups/227360275300121/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:54:58.266557+00:00",
+    "group_id": "5313215722098232",
+    "group_name": "Jasa Pembuatan Website, Mobile dan Desktop Aplikasi Profesional",
+    "group_url": "https://www.facebook.com/groups/5313215722098232/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T11:56:46.208952+00:00",
+    "group_id": "jual.beli.blog.adsense",
+    "group_name": "Jual Beli Blog dan Adsense",
+    "group_url": "https://www.facebook.com/groups/jual.beli.blog.adsense/",
+    "template": "post_2.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "Could not open group composer",
+    "screenshot": "data\\accounts\\acc-1\\logs\\screenshots\\20260430_115646_jual.beli.blog.adsense_Could_not_open_group_composer.png"
+  },
+  {
+    "timestamp": "2026-04-30T11:58:45.578811+00:00",
+    "group_id": "jualbelirdpvpsindonesia",
+    "group_name": "JUAL BELI RDP/VPS INDONESIA",
+    "group_url": "https://www.facebook.com/groups/jualbelirdpvpsindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:00:34.056109+00:00",
+    "group_id": "844501515623650",
+    "group_name": "JUAL BELI RDP/VPS INDONESIA",
+    "group_url": "https://www.facebook.com/groups/844501515623650/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:02:02.534923+00:00",
+    "group_id": "488733558380578",
+    "group_name": "Jual Beli Script/Jasa Website",
+    "group_url": "https://www.facebook.com/groups/488733558380578/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:04:29.076567+00:00",
+    "group_id": "Keluarga.Blogger.Indonesia",
+    "group_name": "Keluarga Blogger Indonesia",
+    "group_url": "https://www.facebook.com/groups/Keluarga.Blogger.Indonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:05:55.953547+00:00",
+    "group_id": "bloggerindonesiakbi",
+    "group_name": "Komunitas Blogger Indonesia (KBI)",
+    "group_url": "https://www.facebook.com/groups/bloggerindonesiakbi/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:07:42.439605+00:00",
+    "group_id": "komitindo",
+    "group_name": "Komunitas Programmer Indonesia",
+    "group_url": "https://www.facebook.com/groups/komitindo/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:09:36.307332+00:00",
+    "group_id": "komunitaswordpress",
+    "group_name": "Komunitas Wordpress Indonesia",
+    "group_url": "https://www.facebook.com/groups/komunitaswordpress/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:11:41.458807+00:00",
+    "group_id": "1937569306534947",
+    "group_name": "Laravel Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/1937569306534947/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:13:58.476722+00:00",
+    "group_id": "laravel",
+    "group_name": "Laravel Indonesia",
+    "group_url": "https://www.facebook.com/groups/laravel/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:15:28.990411+00:00",
+    "group_id": "nodejsid",
+    "group_name": "Node.js Indonesia",
+    "group_url": "https://www.facebook.com/groups/nodejsid/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:17:42.471684+00:00",
+    "group_id": "nusantaracode",
+    "group_name": "Nusantara Code | Show Off Area",
+    "group_url": "https://www.facebook.com/groups/nusantaracode/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:19:10.116746+00:00",
+    "group_id": "1577315533418837",
+    "group_name": "OpenClaw Community",
+    "group_url": "https://www.facebook.com/groups/1577315533418837/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:20:37.230227+00:00",
+    "group_id": "1654584299246766",
+    "group_name": "OpenClaw Community Indonesia",
+    "group_url": "https://www.facebook.com/groups/1654584299246766/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:22:34.149523+00:00",
+    "group_id": "537068576640258",
+    "group_name": "PASAR 16 DIGITAL",
+    "group_url": "https://www.facebook.com/groups/537068576640258/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:24:04.417898+00:00",
+    "group_id": "254352530379180",
+    "group_name": "PASAR 16 DIGITAL DARKNET",
+    "group_url": "https://www.facebook.com/groups/254352530379180/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:25:46.644964+00:00",
+    "group_id": "6251643788192611",
+    "group_name": "PASAR JASA PEMBUATAN WEBSITE DAN APLIKASI INDONESIA",
+    "group_url": "https://www.facebook.com/groups/6251643788192611/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:27:57.395204+00:00",
+    "group_id": "625353957894400",
+    "group_name": "Pengembangan Website untuk Pemula",
+    "group_url": "https://www.facebook.com/groups/625353957894400/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:30:11.139171+00:00",
+    "group_id": "phpmysql.indonesia",
+    "group_name": "PHP Indonesia",
+    "group_url": "https://www.facebook.com/groups/phpmysql.indonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:32:37.779859+00:00",
+    "group_id": "767885933562517",
+    "group_name": "PHP Laravel Indonesia",
+    "group_url": "https://www.facebook.com/groups/767885933562517/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:34:52.426586+00:00",
+    "group_id": "PojokProgrammer",
+    "group_name": "Pojok Programmer",
+    "group_url": "https://www.facebook.com/groups/PojokProgrammer/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:36:25.594949+00:00",
+    "group_id": "ProgIndo",
+    "group_name": "Programmer Indonesia (Progindo)",
+    "group_url": "https://www.facebook.com/groups/ProgIndo/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:37:56.883906+00:00",
+    "group_id": "3558639664446686",
+    "group_name": "Programming | Coding",
+    "group_url": "https://www.facebook.com/groups/3558639664446686/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:39:31.491456+00:00",
+    "group_id": "1547113062220560",
+    "group_name": "Python - Indonesian Programmers",
+    "group_url": "https://www.facebook.com/groups/1547113062220560/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T12:41:49.813205+00:00",
+    "group_id": "adsenseearners",
+    "group_name": "RDP and VPS Buy and Sale",
+    "group_url": "https://www.facebook.com/groups/adsenseearners/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:00:26.278179+00:00",
+    "group_id": "493284524643486",
+    "group_name": "SEO BLOGGER & WORDPRESS INDONESIA",
+    "group_url": "https://www.facebook.com/groups/493284524643486/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:02:27.517288+00:00",
+    "group_id": "jasabacklink",
+    "group_name": "SEO INDONESIA (Backlink PBN EDU AUTHORITY, AGED DOMAIN, BLOGROLL, STICKY)",
+    "group_url": "https://www.facebook.com/groups/jasabacklink/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:03:59.149048+00:00",
+    "group_id": "belajarseoWP",
+    "group_name": "SEO Wordpress Indonesia",
+    "group_url": "https://www.facebook.com/groups/belajarseoWP/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:05:50.804664+00:00",
+    "group_id": "modern.web.design.development",
+    "group_name": "Web Design and Development",
+    "group_url": "https://www.facebook.com/groups/modern.web.design.development/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:08:05.633400+00:00",
+    "group_id": "komunitaswebdesignindonesia",
+    "group_name": "WEB DESIGN COMMUNITY",
+    "group_url": "https://www.facebook.com/groups/komunitaswebdesignindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:10:18.017968+00:00",
+    "group_id": "webdesignerindonesia",
+    "group_name": "Web Designer Indonesia",
+    "group_url": "https://www.facebook.com/groups/webdesignerindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:12:23.347581+00:00",
+    "group_id": "developer.webid",
+    "group_name": "Web Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/developer.webid/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:14:17.171392+00:00",
+    "group_id": "1490762221209843",
+    "group_name": "Web Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/1490762221209843/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:16:07.763565+00:00",
+    "group_id": "WebDeveloperIndonesia",
+    "group_name": "Web Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/WebDeveloperIndonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:18:21.735129+00:00",
+    "group_id": "forumdeveloperindonesia",
+    "group_name": "Web Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/forumdeveloperindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:20:28.744557+00:00",
+    "group_id": "web.developer.indonesian",
+    "group_name": "Web Developer Indonesia",
+    "group_url": "https://www.facebook.com/groups/web.developer.indonesian/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:22:39.758324+00:00",
+    "group_id": "280547388746766",
+    "group_name": "Web Development",
+    "group_url": "https://www.facebook.com/groups/280547388746766/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:24:56.671429+00:00",
+    "group_id": "812201332759614",
+    "group_name": "Web Mastery HTML, CSS & Javascript",
+    "group_url": "https://www.facebook.com/groups/812201332759614/",
+    "template": "post_2.yaml",
+    "status": "failed",
+    "dry_run": false,
+    "detail": "Could not open group composer",
+    "screenshot": "data\\accounts\\acc-1\\logs\\screenshots\\20260430_132456_812201332759614_Could_not_open_group_composer.png"
+  },
+  {
+    "timestamp": "2026-04-30T13:26:57.635889+00:00",
+    "group_id": "groupwordpressindonesia",
+    "group_name": "WORDPRESS BLOGGER INDONESIA™",
+    "group_url": "https://www.facebook.com/groups/groupwordpressindonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:28:29.741161+00:00",
+    "group_id": "1368892514339640",
+    "group_name": "WORDPRESS INDONESIA JAYA",
+    "group_url": "https://www.facebook.com/groups/1368892514339640/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:30:49.529836+00:00",
+    "group_id": "wpidreborn",
+    "group_name": "Wordpress Indonesia Reborn",
+    "group_url": "https://www.facebook.com/groups/wpidreborn/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:32:15.446088+00:00",
+    "group_id": "wordpress.indonesia.official",
+    "group_name": "Wordpress Indonesia ✅",
+    "group_url": "https://www.facebook.com/groups/wordpress.indonesia.official/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  },
+  {
+    "timestamp": "2026-04-30T13:34:02.966505+00:00",
+    "group_id": "wordpres.seo.indonesia",
+    "group_name": "Wordpress SEO & Digital Marketing Indonesia",
+    "group_url": "https://www.facebook.com/groups/wordpres.seo.indonesia/",
+    "template": "post_2.yaml",
+    "status": "posted",
+    "dry_run": false,
+    "detail": "Posted"
+  }
+]
