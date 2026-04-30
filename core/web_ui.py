@@ -2518,8 +2518,6 @@ def _render_page() -> str:
 
         <div class="toolbar">
           <div class="toolbar-btns" id="selectedActions">
-            <button type="button" data-action="test_session">🔍 Test Session</button>
-            <button type="button" data-action="setup_session">🔐 Setup Session</button>
             <button type="button" data-action="scrape_groups" class="btn-yellow">🕷️ Scrape Groups</button>
             <button type="button" data-action="run_once_dry">🧪 Run Dry</button>
             <button type="button" data-action="run_once_live" class="btn-green">🚀 Run Live</button>
@@ -3531,6 +3529,7 @@ def _render_page() -> str:
       const btns = [
         `<button class="sm-btn btn-primary" type="button" onclick="openTemplateModal('${esc(a.id)}')" title="Set template" aria-label="Set template">🧩</button>`,
         `<button class="sm-btn" type="button" onclick="callAction('setup_session','${esc(a.id)}')" title="Login / Setup session" aria-label="Login">🔐</button>`,
+        `<button class="sm-btn" type="button" onclick="callAction('test_session','${esc(a.id)}')" title="Test session validity" aria-label="Test session">🔍</button>`,
         `<button class="sm-btn btn-yellow" type="button" onclick="setActiveAccountFromList('${esc(a.id)}')" title="Set as active account" aria-label="Set as active account">⚡</button>`,
         a.enabled
           ? `<button class="sm-btn" type="button" onclick="callAction('disable_account','${esc(a.id)}')" title="Disable account" aria-label="Disable account">⏸</button>`
@@ -3615,8 +3614,6 @@ def _render_page() -> str:
     const holder = document.getElementById('selectedActions');
 
     const buttons = [
-      '<button type="button" data-action="test_session">🔍 Test Session</button>',
-      '<button type="button" data-action="setup_session">🔐 Setup Session</button>',
       '<button type="button" data-action="scrape_groups" class="btn-yellow">🕷️ Scrape Groups</button>',
     ];
 
