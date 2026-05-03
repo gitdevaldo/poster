@@ -2753,6 +2753,8 @@ def _render_page() -> str:
       <div class="frow" style="margin-bottom:10px">
         <input id="tplNewImage" type="text" placeholder="templates/images/your-image.png" style="flex:1;min-width:220px">
         <button id="tplAddImageBtn" class="btn-green" type="button">+ Add Image</button>
+        <input id="tplImageFileInput" type="file" accept="image/*" style="display:none" multiple>
+        <button id="tplBrowseImageBtn" class="btn-primary" type="button">📁 Browse</button>
       </div>
 
       <div class="frow">
@@ -3951,6 +3953,31 @@ def _render_page() -> str:
     inp.value = '';
     renderTemplateImagesEditor();
   });
+  document.getElementById('tplBrowseImageBtn').addEventListener('click', () => {
+    document.getElementById('tplImageFileInput').click();
+  });
+  document.getElementById('tplImageFileInput').addEventListener('change', async (ev) => {
+    const files = ev.target.files;
+    if (!files || !files.length) return;
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('image', file);
+      try {
+        const res = await fetch('/api/upload-image', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok) {
+          templateEditImages.push(data.path);
+          renderTemplateImagesEditor();
+          toast('Image uploaded: ' + data.path);
+        } else {
+          toast(data.error || 'Upload failed', true);
+        }
+      } catch (err) {
+        toast('Upload error: ' + err.message, true);
+      }
+    }
+    ev.target.value = '';
+  });
   document.getElementById('applyTemplateBtn').addEventListener('click', async () => {
     const selectedTemplate = (document.getElementById('templateSelect').value || '').trim();
     if (!selectedTemplate) {
@@ -4894,6 +4921,9 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
           self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/upload-image":
+                self._handle_image_upload()
+                return
             if self.path != "/api/action":
                 self.send_error(404)
                 return
@@ -5009,6 +5039,65 @@ def run_web_ui(*, config_path: Path, host: str, port: int) -> None:
                     self._send_json({"ok": False, "error": result, "state": state_payload}, status=400)
             except Exception as exc:
                 self._send_json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
+
+        def _handle_image_upload(self) -> None:
+            import re as _re
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type:
+                self._send_json({"ok": False, "error": "Invalid content type"}, status=400)
+                return
+            try:
+                content_len = int(self.headers.get("Content-Length", "0") or "0")
+                body = self.rfile.read(content_len)
+                boundary = ""
+                for part in content_type.split(";"):
+                    part = part.strip()
+                    if part.startswith("boundary="):
+                        boundary = part[9:].strip('"')
+                        break
+                if not boundary:
+                    self._send_json({"ok": False, "error": "Missing boundary"}, status=400)
+                    return
+                delimiter = f"--{boundary}".encode()
+                parts = body.split(delimiter)
+                file_data: bytes | None = None
+                filename = ""
+                for part in parts:
+                    if b"Content-Disposition:" not in part and b"content-disposition:" not in part:
+                        continue
+                    header_end = part.find(b"\r\n\r\n")
+                    if header_end < 0:
+                        continue
+                    header_block = part[:header_end].decode("utf-8", errors="ignore")
+                    if 'name="image"' not in header_block:
+                        continue
+                    fn_match = _re.search(r'filename="([^"]+)"', header_block)
+                    if fn_match:
+                        filename = fn_match.group(1)
+                    file_data = part[header_end + 4:]
+                    if file_data.endswith(b"\r\n"):
+                        file_data = file_data[:-2]
+                    break
+                if file_data is None or not filename:
+                    self._send_json({"ok": False, "error": "No file selected"}, status=400)
+                    return
+                safe_name = _re.sub(r'[^\w.\-]', '_', os.path.basename(filename))
+                if not safe_name:
+                    self._send_json({"ok": False, "error": "Invalid filename"}, status=400)
+                    return
+                images_dir = Path("templates") / "images"
+                images_dir.mkdir(parents=True, exist_ok=True)
+                dest = images_dir / safe_name
+                counter = 1
+                while dest.exists():
+                    stem = Path(safe_name).stem
+                    suffix = Path(safe_name).suffix
+                    dest = images_dir / f"{stem}_{counter}{suffix}"
+                    counter += 1
+                dest.write_bytes(file_data)
+                self._send_json({"ok": True, "path": str(dest).replace(os.sep, "/")})
+            except Exception as exc:
+                self._send_json({"ok": False, "error": f"Upload failed: {exc}"}, status=500)
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             return
